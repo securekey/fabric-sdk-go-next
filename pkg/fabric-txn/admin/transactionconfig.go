@@ -47,10 +47,11 @@ func SendInstallCC(client fab.FabricClient, chainCodeID string, chainCodePath st
 
 // SendInstantiateCC Sends instantiate CC proposal to one or more endorsing peers
 func SendInstantiateCC(channel fab.Channel, chainCodeID string, args [][]byte,
-	chaincodePath string, chaincodeVersion string, chaincodePolicy *common.SignaturePolicyEnvelope, targets []apitxn.ProposalProcessor, eventHub fab.EventHub) error {
+	chaincodePath string, chaincodeVersion string, chaincodePolicy *common.SignaturePolicyEnvelope,
+	collConfig []*common.CollectionConfig, targets []apitxn.ProposalProcessor, eventHub fab.EventHub) error {
 
 	transactionProposalResponse, txID, err := channel.SendInstantiateProposal(chainCodeID,
-		args, chaincodePath, chaincodeVersion, chaincodePolicy, targets)
+		args, chaincodePath, chaincodeVersion, chaincodePolicy, collConfig, targets)
 	if err != nil {
 		return errors.WithMessage(err, "SendInstantiateProposal failed")
 	}
