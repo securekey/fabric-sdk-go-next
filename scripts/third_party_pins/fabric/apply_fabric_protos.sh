@@ -31,6 +31,7 @@ declare -a FILES=(
     "protos/common/configuration.pb.go"
     "protos/common/ledger.pb.go"
     "protos/common/policies.pb.go"
+    "protos/common/collection.pb.go"
 
     "protos/peer/chaincode.pb.go"
     "protos/peer/chaincode_event.pb.go"
