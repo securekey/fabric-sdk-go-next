@@ -13,7 +13,6 @@ import (
 	config "github.com/hyperledger/fabric-sdk-go/api/apiconfig"
 
 	"github.com/hyperledger/fabric-sdk-go/pkg/errors"
-	bccspFactory "github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/bccsp/factory"
 )
 
 // MockConfig ...
@@ -91,12 +90,12 @@ func (c *MockConfig) TcertBatchSize() int {
 
 // SecurityAlgorithm ...
 func (c *MockConfig) SecurityAlgorithm() string {
-	return ""
+	return "SHA2"
 }
 
 // SecurityLevel ...
 func (c *MockConfig) SecurityLevel() int {
-	return 0
+	return 256
 
 }
 
@@ -120,8 +119,13 @@ func (c *MockConfig) OrdererConfig(name string) (*config.OrdererConfig, error) {
 	return nil, nil
 }
 
-// MspID ...
+// MspID not implemented
 func (c *MockConfig) MspID(org string) (string, error) {
+	return "", nil
+}
+
+// PeerMspID not implemented
+func (c *MockConfig) PeerMspID(name string) (string, error) {
 	return "", nil
 }
 
@@ -138,11 +142,6 @@ func (c *MockConfig) CAKeyStorePath() string {
 // CryptoConfigPath ...
 func (c *MockConfig) CryptoConfigPath() string {
 	return ""
-}
-
-// CSPConfig ...
-func (c *MockConfig) CSPConfig() *bccspFactory.FactoryOpts {
-	return nil
 }
 
 // NetworkConfig not implemented
@@ -165,6 +164,11 @@ func (c *MockConfig) ChannelOrderers(name string) ([]config.OrdererConfig, error
 	return nil, nil
 }
 
+// NetworkPeers returns the mock network peers configuration
+func (c *MockConfig) NetworkPeers() ([]config.NetworkPeer, error) {
+	return nil, nil
+}
+
 // Ephemeral flag
 func (c *MockConfig) Ephemeral() bool {
 	return false
@@ -172,7 +176,7 @@ func (c *MockConfig) Ephemeral() bool {
 
 // SecurityProvider ...
 func (c *MockConfig) SecurityProvider() string {
-	return ""
+	return "SW"
 }
 
 // SecurityProviderLabel ...

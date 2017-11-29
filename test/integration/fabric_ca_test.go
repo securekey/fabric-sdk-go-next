@@ -20,7 +20,6 @@ import (
 	client "github.com/hyperledger/fabric-sdk-go/pkg/fabric-client"
 	"github.com/hyperledger/fabric-sdk-go/pkg/fabric-client/identity"
 	kvs "github.com/hyperledger/fabric-sdk-go/pkg/fabric-client/keyvaluestore"
-	bccspFactory "github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/bccsp/factory"
 
 	cryptosuite "github.com/hyperledger/fabric-sdk-go/pkg/cryptosuite/bccsp"
 	fabricCAClient "github.com/hyperledger/fabric-sdk-go/pkg/fabric-ca-client"
@@ -44,12 +43,10 @@ func TestRegisterEnrollRevoke(t *testing.T) {
 
 	client := client.NewClient(testFabricConfig)
 
-	err = bccspFactory.InitFactories(testFabricConfig.CSPConfig())
+	cryptoSuiteProvider, err := cryptosuite.GetSuiteByConfig(testFabricConfig)
 	if err != nil {
-		t.Fatalf("Failed getting ephemeral software-based BCCSP [%s]", err)
+		t.Fatalf("Failed getting cryptosuite from config : %s", err)
 	}
-
-	cryptoSuiteProvider := cryptosuite.GetSuite(bccspFactory.GetDefault())
 
 	client.SetCryptoSuite(cryptoSuiteProvider)
 	stateStore, err := kvs.CreateNewFileKeyValueStore("/tmp/enroll_user")
@@ -58,7 +55,7 @@ func TestRegisterEnrollRevoke(t *testing.T) {
 	}
 	client.SetStateStore(stateStore)
 
-	caClient, err := fabricCAClient.NewFabricCAClient(testFabricConfig, org1Name)
+	caClient, err := fabricCAClient.NewFabricCAClient(org1Name, testFabricConfig, cryptoSuiteProvider)
 	if err != nil {
 		t.Fatalf("NewFabricCAClient return error: %v", err)
 	}
@@ -153,7 +150,12 @@ func TestRegisterEnrollRevoke(t *testing.T) {
 
 func TestEnrollOrg2(t *testing.T) {
 
-	caClient, err := fabricCAClient.NewFabricCAClient(testFabricConfig, org2Name)
+	cryptoSuiteProvider, err := cryptosuite.GetSuiteByConfig(testFabricConfig)
+	if err != nil {
+		t.Fatalf("Failed getting cryptosuite from config : %s", err)
+	}
+
+	caClient, err := fabricCAClient.NewFabricCAClient(org2Name, testFabricConfig, cryptoSuiteProvider)
 	if err != nil {
 		t.Fatalf("NewFabricCAClient return error: %v", err)
 	}

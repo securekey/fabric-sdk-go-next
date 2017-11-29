@@ -49,7 +49,7 @@ FABRIC_TOOLS_TAG    ?= $(ARCH)-$(FABRIC_TOOLS_VERSION)
 THIRDPARTY_FABRIC_CA_BRANCH ?= master
 THIRDPARTY_FABRIC_CA_COMMIT ?= v1.1.0-preview
 THIRDPARTY_FABRIC_BRANCH    ?= master
-THIRDPARTY_FABRIC_COMMIT    ?= 23336922568e0e88b35ab30931a3e1e36c94622f
+THIRDPARTY_FABRIC_COMMIT    ?= 750c1393168aae3f910c8d7831860dbd6f259078
 
 # Force removal of images in cleanup
 FIXTURE_DOCKER_REMOVE_FORCE ?= false
@@ -155,6 +155,6 @@ populate-clean:
 
 clean:
 	-$(GO_CMD) clean
-	-rm -Rf /tmp/enroll_user /tmp/msp /tmp/keyvaluestore /tmp/hfc-kvs
+	-rm -Rf /tmp/enroll_user /tmp/msp /tmp/keyvaluestore /tmp/hfc-kvs /tmp/state
 	-rm -f integration-report.xml report.xml
 	-FIXTURE_PROJECT_NAME=$(FIXTURE_PROJECT_NAME) DOCKER_REMOVE_FORCE=$(FIXTURE_DOCKER_REMOVE_FORCE) test/scripts/clean_integration.sh

@@ -9,6 +9,8 @@
 # These files are checked into internal paths.
 # Note: This script must be adjusted as upstream makes adjustments
 
+set -e
+
 IMPORT_SUBSTS=($IMPORT_SUBSTS)
 
 GOIMPORTS_CMD=goimports
@@ -19,6 +21,7 @@ declare -a PKGS=(
     "lib"
     "lib/tls"
     "sdkpatch/logbridge"
+    "sdkpatch/cryptosuitebridge"
     "util"
 )
 
@@ -37,6 +40,7 @@ declare -a FILES=(
 
     "sdkpatch/logbridge/logbridge.go"
     "sdkpatch/logbridge/syslogwriter.go"
+    "sdkpatch/cryptosuitebridge/cryptosuitebridge.go"
 
     "util/util.go"
     "util/csp.go"
@@ -75,6 +79,12 @@ sed -i'' -e '/log "github.com\// a\
 ' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
 sed -i'' -e 's/bccsp.BCCSP/apicryptosuite.CryptoSuite/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
 sed -i'' -e 's/bccsp.Key/apicryptosuite.Key/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e 's/\/\/ Initialize BCCSP (the crypto layer)/c.csp = cfg.CSP/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+START_LINE=`grep -n "c.csp, err = util.InitBCCSP(&cfg.CSP, mspDir, c.HomeDir)" "${TMP_PROJECT_PATH}/${FILTER_FILENAME}" | head -n 1 | awk -F':' '{print $1}'`
+for i in {1..4}
+do
+    sed -i'' -e ${START_LINE}'d' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+done
 
 FILTER_FILENAME="lib/identity.go"
 FILTER_FN="newIdentity,Revoke,Post,addTokenAuthHdr,GetECert,Reenroll,Register,GetName"
@@ -89,7 +99,7 @@ sed -i'' -e 's/bccsp.Key/apicryptosuite.Key/g' "${TMP_PROJECT_PATH}/${FILTER_FIL
 FILTER_FILENAME="lib/signer.go"
 FILTER_FN="newSigner,Key,Cert"
 gofilter
-sed -i'' -e '/"github.com\// a\
+sed -i'' -e '/"github.com\/cloudflare/ a\
 "github.com\/hyperledger\/fabric-sdk-go\/api\/apicryptosuite"\
 ' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
 sed -i'' -e 's/bccsp.Key/apicryptosuite.Key/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
@@ -97,6 +107,8 @@ sed -i'' -e 's/bccsp.Key/apicryptosuite.Key/g' "${TMP_PROJECT_PATH}/${FILTER_FIL
 FILTER_FILENAME="lib/clientconfig.go"
 FILTER_FN=
 gofilter
+sed -i'' -e 's/*factory.FactoryOpts/apicryptosuite.CryptoSuite/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+
 
 FILTER_FILENAME="lib/util.go"
 FILTER_FN="GetCertID,BytesToX509Cert"
@@ -108,17 +120,11 @@ gofilter
 sed -i'' -e '/log "github.com\// a\
 "github.com\/hyperledger\/fabric-sdk-go\/api\/apicryptosuite"\
 ' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
-sed -i'' -e '/"crypto\// a\
-cryptosuite "github.com\/hyperledger\/fabric-sdk-go\/pkg\/cryptosuite\/bccsp"\
-' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
 sed -i'' -e 's/bccsp.BCCSP/apicryptosuite.CryptoSuite/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
-sed -i'' -e 's/csp = factory.GetDefault()/csp = cryptosuite.GetSuite(factory.GetDefault())/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
 
 
 FILTER_FILENAME="util/csp.go"
-FILTER_FN="InitBCCSP,ConfigureBCCSP,GetBCCSP,makeFileNamesAbsolute"
-FILTER_FN+=",getBCCSPKeyOpts,ImportBCCSPKeyFromPEM,LoadX509KeyPair,GetSignerFromCert"
-FILTER_FN+=",BCCSPKeyRequestGenerate,GetSignerFromCertFile"
+FILTER_FN=",getBCCSPKeyOpts,ImportBCCSPKeyFromPEM,LoadX509KeyPair,GetSignerFromCert,BCCSPKeyRequestGenerate"
 gofilter
 sed -i'' -e '/_.\"time\"/d' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
 sed -i'' -e '/\"github.com\/cloudflare\/cfssl\/cli\"/d' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
@@ -126,15 +132,23 @@ sed -i'' -e '/\"github.com\/cloudflare\/cfssl\/ocsp\"/d' "${TMP_PROJECT_PATH}/${
 sed -i'' -e '/log "github.com\// a\
 "github.com\/hyperledger\/fabric-sdk-go\/api\/apicryptosuite"\
 ' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
-sed -i'' -e '/cspsigner "github.com\// a\
-cryptosuite "github.com\/hyperledger\/fabric-sdk-go\/pkg\/cryptosuite\/bccsp"\
-' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
 sed -i'' -e 's/bccsp.BCCSP/apicryptosuite.CryptoSuite/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
 sed -i'' -e 's/bccsp.Key/apicryptosuite.Key/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
-# skip first substitution of "return csp, nil"
-START_LINE=`grep -n "return csp, nil" "${TMP_PROJECT_PATH}/${FILTER_FILENAME}" | head -n 1 | awk -F':' '{print $1}'`
-START_LINE=$((START_LINE+1))
-sed -i'' -e ${START_LINE}',$ s/return csp, nil/return cryptosuite.GetSuite(csp), nil/g'  "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e 's/&factory.SwOpts{}/factory.NewSwOpts()/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e 's/&factory.FileKeystoreOpts{}/factory.NewFileKeystoreOpts()/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e 's/&bccsp.ECDSAKeyGenOpts{Temporary: ephemeral}/factory.GetECDSAKeyGenOpts(ephemeral)/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e 's/&bccsp.RSA2048KeyGenOpts{Temporary: ephemeral}/factory.GetRSA2048KeyGenOpts(ephemeral)/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e 's/&bccsp.RSA3072KeyGenOpts{Temporary: ephemeral}/factory.GetRSA3072KeyGenOpts(ephemeral)/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e 's/&bccsp.RSA4096KeyGenOpts{Temporary: ephemeral}/factory.GetRSA4096KeyGenOpts(ephemeral)/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e 's/&bccsp.ECDSAP256KeyGenOpts{Temporary: ephemeral}/factory.GetECDSAP256KeyGenOpts(ephemeral)/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e 's/&bccsp.ECDSAP384KeyGenOpts{Temporary: ephemeral}/factory.GetECDSAP384KeyGenOpts(ephemeral)/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e 's/&bccsp.ECDSAP512KeyGenOpts{Temporary: ephemeral}/factory.GetECDSAP512KeyGenOpts(ephemeral)/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e 's/&bccsp.X509PublicKeyImportOpts{Temporary: true}/factory.GetX509PublicKeyImportOpts(true)/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e 's/&bccsp.ECDSAPrivateKeyImportOpts{Temporary: temporary}/factory.GetECDSAPrivateKeyImportOpts(temporary)/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e 's/cspsigner.New(/factory.NewCspSigner(/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e 's/utils.PrivateKeyToDER/factory.PrivateKeyToDER/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e 's/utils.PEMtoPrivateKey/factory.PEMtoPrivateKey/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+
 
 FILTER_FILENAME="util/util.go"
 FILTER_FN="ReadFile,HTTPRequestToString,HTTPResponseToString"
@@ -146,8 +160,12 @@ gofilter
 sed -i'' -e '/log "golang.org\/x/ a\
 "github.com\/hyperledger\/fabric-sdk-go\/api\/apicryptosuite"\
 ' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e '/mrand "math\// a\
+factory "github.com\/hyperledger\/fabric-sdk-go\/internal\/github.com\/hyperledger\/fabric-ca\/sdkpatch\/cryptosuitebridge"\
+' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
 sed -i'' -e 's/bccsp.BCCSP/apicryptosuite.CryptoSuite/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
 sed -i'' -e 's/bccsp.Key/apicryptosuite.Key/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e 's/&bccsp.SHAOpts{}/factory.GetSHAOpts()/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
 
 # Apply patching
 echo "Patching import paths on upstream project ..."
