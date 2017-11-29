@@ -40,12 +40,12 @@ mkdir -p $GOPATH/src/github.com/hyperledger/fabric-sdk-go
 cd $GOPATH/src/github.com/hyperledger/
 git clone https://gerrit.hyperledger.org/r/fabric-sdk-go
 cd fabric-sdk-go
-git checkout 8e17702eb5024f4d03461ae3c86f516c8729ed1d
+git checkout 55aac0283d585d5ec2506c920cbf4723a433e7e5
 
 
 #[FAB-6523] Bump Fabric version
 #https://gerrit.hyperledger.org/r/#/c/14321/ - [FAB-6523] Bump Fabric version
-git fetch https://gerrit.hyperledger.org/r/fabric-sdk-go refs/changes/21/14321/21 && git cherry-pick FETCH_HEAD
+#git fetch https://gerrit.hyperledger.org/r/fabric-sdk-go refs/changes/21/14321/21 && git cherry-pick FETCH_HEAD
 
 ##[FAB-6982] - Support Private Data Collection Config
 #https://gerrit.hyperledger.org/r/#/c/15475/ - [FAB-6982] - Support Private Data Collection Config
