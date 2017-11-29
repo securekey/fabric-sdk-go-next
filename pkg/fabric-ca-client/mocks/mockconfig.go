@@ -11,8 +11,6 @@ import (
 	"time"
 
 	"github.com/hyperledger/fabric-sdk-go/api/apiconfig"
-
-	bccspFactory "github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/bccsp/factory"
 )
 
 // MockConfig ...
@@ -55,6 +53,11 @@ func (c *MockConfig) TimeoutOrDefault(apiconfig.TimeoutType) time.Duration {
 	return 0
 }
 
+// NetworkPeers returns the mock network peers configuration
+func (c *MockConfig) NetworkPeers() ([]apiconfig.NetworkPeer, error) {
+	return nil, nil
+}
+
 // PeersConfig Retrieves the fabric peers from the config file provided
 func (c *MockConfig) PeersConfig(org string) ([]apiconfig.PeerConfig, error) {
 	return nil, nil
@@ -86,13 +89,12 @@ func (c *MockConfig) TcertBatchSize() int {
 
 // SecurityAlgorithm ...
 func (c *MockConfig) SecurityAlgorithm() string {
-	return ""
+	return "SHA2"
 }
 
 // SecurityLevel ...
 func (c *MockConfig) SecurityLevel() int {
-	return 0
-
+	return 256
 }
 
 // OrderersConfig returns a list of defined orderers
@@ -115,6 +117,11 @@ func (c *MockConfig) MspID(org string) (string, error) {
 	return "", nil
 }
 
+// PeerMspID not implemented
+func (c *MockConfig) PeerMspID(name string) (string, error) {
+	return "", nil
+}
+
 // KeyStorePath ...
 func (c *MockConfig) KeyStorePath() string {
 	return "/tmp/msp"
@@ -128,11 +135,6 @@ func (c *MockConfig) CAKeyStorePath() string {
 // CryptoConfigPath ...
 func (c *MockConfig) CryptoConfigPath() string {
 	return ""
-}
-
-// CSPConfig ...
-func (c *MockConfig) CSPConfig() *bccspFactory.FactoryOpts {
-	return nil
 }
 
 // NetworkConfig not implemented

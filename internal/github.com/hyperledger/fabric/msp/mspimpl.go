@@ -19,11 +19,9 @@ import (
 	"fmt"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/bccsp/signer"
-	cryptosuite "github.com/hyperledger/fabric-sdk-go/pkg/cryptosuite/bccsp"
+	"github.com/hyperledger/fabric-sdk-go/api/apicryptosuite"
+	factory "github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/sdkpatch/cryptosuitebridge"
 	"github.com/hyperledger/fabric-sdk-go/pkg/errors"
-	"github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/bccsp"
-	"github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/bccsp/factory"
 	m "github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/protos/msp"
 )
 
@@ -71,7 +69,7 @@ type bccspmsp struct {
 	admins []Identity
 
 	// the crypto provider
-	bccsp bccsp.BCCSP
+	bccsp apicryptosuite.CryptoSuite
 
 	// the provider identifier for this MSP
 	name string
@@ -99,13 +97,12 @@ type bccspmsp struct {
 // crypto provider. It handles x.509 certificates and can
 // generate identities and signing identities backed by
 // certificates and keypairs
-func NewBccspMsp(version MSPVersion) (MSP, error) {
+func NewBccspMsp(version MSPVersion, cryptoSuite apicryptosuite.CryptoSuite) (MSP, error) {
 	mspLogger.Debugf("Creating BCCSP-based MSP instance")
 
-	bccsp := factory.GetDefault()
 	theMsp := &bccspmsp{}
 	theMsp.version = version
-	theMsp.bccsp = bccsp
+	theMsp.bccsp = cryptoSuite
 	switch version {
 	case MSPv1_0:
 		theMsp.internalSetupFunc = theMsp.setupV1
@@ -141,7 +138,7 @@ func (msp *bccspmsp) getCertFromPem(idBytes []byte) (*x509.Certificate, error) {
 	return cert, nil
 }
 
-func (msp *bccspmsp) getIdentityFromConf(idBytes []byte) (Identity, bccsp.Key, error) {
+func (msp *bccspmsp) getIdentityFromConf(idBytes []byte) (Identity, apicryptosuite.Key, error) {
 	// get a cert
 	cert, err := msp.getCertFromPem(idBytes)
 	if err != nil {
@@ -149,7 +146,7 @@ func (msp *bccspmsp) getIdentityFromConf(idBytes []byte) (Identity, bccsp.Key, e
 	}
 
 	// get the public key in the right format
-	certPubK, err := msp.bccsp.KeyImport(cert, &bccsp.X509PublicKeyImportOpts{Temporary: true})
+	certPubK, err := msp.bccsp.KeyImport(cert, factory.GetX509PublicKeyImportOpts(true))
 
 	mspId, err := newIdentity(cert, certPubK, msp)
 	if err != nil {
@@ -180,14 +177,14 @@ func (msp *bccspmsp) getSigningIdentityFromConf(sidInfo *m.SigningIdentityInfo) 
 		}
 
 		pemKey, _ := pem.Decode(sidInfo.PrivateSigner.KeyMaterial)
-		privKey, err = msp.bccsp.KeyImport(pemKey.Bytes, &bccsp.ECDSAPrivateKeyImportOpts{Temporary: true})
+		privKey, err = msp.bccsp.KeyImport(pemKey.Bytes, factory.GetECDSAPrivateKeyImportOpts(true))
 		if err != nil {
 			return nil, errors.WithMessage(err, "getIdentityFromBytes error: Failed to import EC private key")
 		}
 	}
 
 	// get the peer signer
-	peerSigner, err := signer.New(cryptosuite.GetSuite(msp.bccsp), cryptosuite.GetKey(privKey))
+	peerSigner, err := factory.NewCspSigner(msp.bccsp, privKey)
 	if err != nil {
 		return nil, errors.WithMessage(err, "getIdentityFromBytes error: Failed initializing bccspCryptoSigner")
 	}
@@ -281,6 +278,51 @@ func (msp *bccspmsp) Validate(id Identity) error {
 	}
 }
 
+// hasOURole checks that the identity belongs to the organizational unit
+// associated to the specified MSPRole.
+// This function does not check the certifiers identifier.
+// Appropriate validation needs to be enforced before.
+func (msp *bccspmsp) hasOURole(id Identity, mspRole m.MSPRole_MSPRoleType) error {
+	// Check NodeOUs
+	if !msp.ouEnforcement {
+		return errors.New("NodeOUs not activated. Cannot tell apart identities.")
+	}
+
+	mspLogger.Debugf("MSP %s checking if the identity is a client", msp.name)
+
+	switch id := id.(type) {
+	// If this identity is of this specific type,
+	// this is how I can validate it given the
+	// root of trust this MSP has
+	case *identity:
+		return msp.hasOURoleInternal(id, mspRole)
+	default:
+		return errors.New("Identity type not recognized")
+	}
+}
+
+func (msp *bccspmsp) hasOURoleInternal(id *identity, mspRole m.MSPRole_MSPRoleType) error {
+	var nodeOUValue string
+	switch mspRole {
+	case m.MSPRole_CLIENT:
+		nodeOUValue = msp.clientOU.OrganizationalUnitIdentifier
+	case m.MSPRole_PEER:
+		nodeOUValue = msp.peerOU.OrganizationalUnitIdentifier
+	case m.MSPRole_ORDERER:
+		nodeOUValue = msp.ordererOU.OrganizationalUnitIdentifier
+	default:
+		return fmt.Errorf("Invalid MSPRoleType. It must be CLIENT, PEER or ORDERER")
+	}
+
+	for _, OU := range id.GetOrganizationalUnits() {
+		if OU.OrganizationalUnitIdentifier == nodeOUValue {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("The identity does not contain OU [%s], MSP: [%s]", mspRole, msp.name)
+}
+
 // DeserializeIdentity returns an Identity given the byte-level
 // representation of a SerializedIdentity struct
 func (msp *bccspmsp) DeserializeIdentity(serializedID []byte) (Identity, error) {
@@ -319,7 +361,7 @@ func (msp *bccspmsp) deserializeIdentityInternal(serializedIdentity []byte) (Ide
 	// We can't do it yet because there is no standardized way
 	// (yet) to encode the MSP ID into the x.509 body of a cert
 
-	pub, err := msp.bccsp.KeyImport(cert, &bccsp.X509PublicKeyImportOpts{Temporary: true})
+	pub, err := msp.bccsp.KeyImport(cert, factory.GetX509PublicKeyImportOpts(true))
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed to import certificate's public key")
 	}
@@ -365,8 +407,21 @@ func (msp *bccspmsp) SatisfiesPrincipal(id Identity, principal *m.MSPPrincipal) 
 					return nil
 				}
 			}
-
 			return errors.New("This identity is not an admin")
+		case m.MSPRole_CLIENT:
+			fallthrough
+		case m.MSPRole_PEER:
+			fallthrough
+		case m.MSPRole_ORDERER:
+			mspLogger.Debugf("Checking if identity satisfies role [%s] for %s", m.MSPRole_MSPRoleType_name[int32(mspRole.Role)], msp.name)
+			if err := msp.Validate(id); err != nil {
+				return errors.Wrapf(err, "The identity is not valid under this MSP [%s]", msp.name)
+			}
+
+			if err := msp.hasOURole(id, mspRole.Role); err != nil {
+				return errors.Wrapf(err, "The identity is not a [%s] under this MSP [%s]", m.MSPRole_MSPRoleType_name[int32(mspRole.Role)], msp.name)
+			}
+			return nil
 		default:
 			return errors.Errorf("invalid MSP role type %d", int32(mspRole.Role))
 		}
@@ -447,7 +502,8 @@ func (msp *bccspmsp) getCertificationChainForBCCSPIdentity(id *identity) ([]*x50
 
 	// CAs cannot be directly used as identities..
 	if id.cert.IsCA {
-		return nil, errors.New("A CA certificate cannot be used directly by this MSP")
+		return nil, errors.New("An X509 certificate with Basic Constraint: " +
+			"Certificate Authority equals true cannot be used as an identity")
 	}
 
 	return msp.getValidationChain(id.cert, false)
@@ -512,7 +568,7 @@ func (msp *bccspmsp) getCertificationChainIdentifier(id Identity) ([]byte, error
 func (msp *bccspmsp) getCertificationChainIdentifierFromChain(chain []*x509.Certificate) ([]byte, error) {
 	// Hash the chain
 	// Use the hash of the identity's certificate as id in the IdentityIdentifier
-	hashOpt, err := bccsp.GetHashOpt(msp.cryptoConfig.IdentityIdentifierHashFunction)
+	hashOpt, err := factory.GetHashOpt(msp.cryptoConfig.IdentityIdentifierHashFunction)
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed getting hash function options")
 	}
