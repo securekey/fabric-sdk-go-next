@@ -159,9 +159,12 @@ func (c *Channel) SendTransaction(tx *apitxn.Transaction) (*apitxn.TransactionRe
 // args: optional - string Array arguments specific to the chaincode being instantiated
 // chaincodePath: required - string of the path to the location of the source code of the chaincode
 // chaincodeVersion: required - string of the version of the chaincode
+// chaincodePolicy: required - chaincode signature policy
+// collConfig: optional - private data collection configuration
 func (c *Channel) SendInstantiateProposal(chaincodeName string,
 	args [][]byte, chaincodePath string, chaincodeVersion string,
-	chaincodePolicy *common.SignaturePolicyEnvelope, targets []apitxn.ProposalProcessor) ([]*apitxn.TransactionProposalResponse, apitxn.TransactionID, error) {
+	chaincodePolicy *common.SignaturePolicyEnvelope,
+	collConfig []*common.CollectionConfig, targets []apitxn.ProposalProcessor) ([]*apitxn.TransactionProposalResponse, apitxn.TransactionID, error) {
 
 	if chaincodeName == "" {
 		return nil, apitxn.TransactionID{}, errors.New("chaincodeName is required")
@@ -196,8 +199,13 @@ func (c *Channel) SendInstantiateProposal(chaincodeName string,
 	if err != nil {
 		return nil, apitxn.TransactionID{}, err
 	}
+	collConfigBytes, err := proto.Marshal(&common.CollectionConfigPackage{Config: collConfig})
+	if err != nil {
+		return nil, apitxn.TransactionID{}, err
+	}
+
 	// create a proposal from a chaincodeDeploymentSpec
-	proposal, txID, err := protos_utils.CreateDeployProposalFromCDS(c.Name(), ccds, creator, chaincodePolicyBytes, []byte("escc"), []byte("vscc"))
+	proposal, txID, err := protos_utils.CreateDeployProposalFromCDS(c.Name(), ccds, creator, chaincodePolicyBytes, []byte("escc"), []byte("vscc"), collConfigBytes)
 	if err != nil {
 		return nil, apitxn.TransactionID{}, errors.Wrap(err, "create chaincode deploy proposal failed")
 	}
