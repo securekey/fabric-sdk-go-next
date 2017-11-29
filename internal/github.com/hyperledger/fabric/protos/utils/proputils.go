@@ -226,28 +226,21 @@ func CreateProposalFromCIS(typ common.HeaderType, chainID string, cis *peer.Chai
 
 // CreateInstallProposalFromCDS returns a install proposal given a serialized identity and a ChaincodeDeploymentSpec
 func CreateInstallProposalFromCDS(ccpack proto.Message, creator []byte) (*peer.Proposal, string, error) {
-	return createProposalFromCDS("", ccpack, creator, "install")
+	return createProposalFromCDS("", ccpack, creator, nil, nil, nil, "install")
 }
 
 // CreateDeployProposalFromCDS returns a deploy proposal given a serialized identity and a ChaincodeDeploymentSpec
-func CreateDeployProposalFromCDS(
-	chainID string,
-	cds *peer.ChaincodeDeploymentSpec,
-	creator []byte,
-	policy []byte,
-	escc []byte,
-	vscc []byte,
-	collectionConfig []byte) (*peer.Proposal, string, error) {
-	return createProposalFromCDS(chainID, cds, creator, "deploy", policy, escc, vscc, collectionConfig)
+func CreateDeployProposalFromCDS(chainID string, cds *peer.ChaincodeDeploymentSpec, creator []byte, policy []byte, escc []byte, vscc []byte) (*peer.Proposal, string, error) {
+	return createProposalFromCDS(chainID, cds, creator, policy, escc, vscc, "deploy")
 }
 
 // CreateUpgradeProposalFromCDS returns a upgrade proposal given a serialized identity and a ChaincodeDeploymentSpec
 func CreateUpgradeProposalFromCDS(chainID string, cds *peer.ChaincodeDeploymentSpec, creator []byte, policy []byte, escc []byte, vscc []byte) (*peer.Proposal, string, error) {
-	return createProposalFromCDS(chainID, cds, creator, "upgrade", policy, escc, vscc)
+	return createProposalFromCDS(chainID, cds, creator, policy, escc, vscc, "upgrade")
 }
 
 // createProposalFromCDS returns a deploy or upgrade proposal given a serialized identity and a ChaincodeDeploymentSpec
-func createProposalFromCDS(chainID string, msg proto.Message, creator []byte, propType string, args ...[]byte) (*peer.Proposal, string, error) {
+func createProposalFromCDS(chainID string, msg proto.Message, creator []byte, policy []byte, escc []byte, vscc []byte, propType string) (*peer.Proposal, string, error) {
 	//in the new mode, cds will be nil, "deploy" and "upgrade" are instantiates.
 	var ccinp *peer.ChaincodeInput
 	var b []byte
@@ -266,10 +259,7 @@ func createProposalFromCDS(chainID string, msg proto.Message, creator []byte, pr
 		if !ok || cds == nil {
 			return nil, "", fmt.Errorf("invalid message for creating lifecycle chaincode proposal from")
 		}
-		Args := [][]byte{[]byte(propType), []byte(chainID), b}
-		Args = append(Args, args...)
-
-		ccinp = &peer.ChaincodeInput{Args: Args}
+		ccinp = &peer.ChaincodeInput{Args: [][]byte{[]byte(propType), []byte(chainID), b, policy, escc, vscc}}
 	case "install":
 		ccinp = &peer.ChaincodeInput{Args: [][]byte{[]byte(propType), b}}
 	}

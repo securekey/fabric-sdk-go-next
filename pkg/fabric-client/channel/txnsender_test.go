@@ -146,7 +146,6 @@ func TestSendInstantiateProposal(t *testing.T) {
 	tpr := apitxn.TransactionProposalResult{Endorser: "example.com", Status: 99, Proposal: tp, ProposalResponse: nil}
 
 	proc.EXPECT().ProcessTransactionProposal(gomock.Any()).Return(tpr, nil)
-	proc.EXPECT().ProcessTransactionProposal(gomock.Any()).Return(tpr, nil)
 	targets := []apitxn.ProposalProcessor{proc}
 
 	//Add a Peer
@@ -154,56 +153,46 @@ func TestSendInstantiateProposal(t *testing.T) {
 	channel.AddPeer(&peer)
 
 	tresponse, txnid, err := channel.SendInstantiateProposal("", nil, "",
-		"", cauthdsl.SignedByMspMember("Org1MSP"), nil, targets)
+		"", cauthdsl.SignedByMspMember("Org1MSP"), targets)
 
 	if err == nil || err.Error() != "chaincodeName is required" {
 		t.Fatal("Validation for chain code name parameter for send Instantiate Proposal failed")
 	}
 
 	tresponse, txnid, err = channel.SendInstantiateProposal("qscc", nil, "",
-		"", cauthdsl.SignedByMspMember("Org1MSP"), nil, targets)
+		"", cauthdsl.SignedByMspMember("Org1MSP"), targets)
 
 	tresponse, txnid, err = channel.SendInstantiateProposal("qscc", nil, "",
-		"", cauthdsl.SignedByMspMember("Org1MSP"), nil, targets)
+		"", cauthdsl.SignedByMspMember("Org1MSP"), targets)
 
 	if err == nil || err.Error() != "chaincodePath is required" {
 		t.Fatal("Validation for chain code path for send Instantiate Proposal failed")
 	}
 
 	tresponse, txnid, err = channel.SendInstantiateProposal("qscc", nil, "test",
-		"", cauthdsl.SignedByMspMember("Org1MSP"), nil, targets)
+		"", cauthdsl.SignedByMspMember("Org1MSP"), targets)
 
 	if err == nil || err.Error() != "chaincodeVersion is required" {
 		t.Fatal("Validation for chain code version for send Instantiate Proposal failed")
 	}
 
 	tresponse, txnid, err = channel.SendInstantiateProposal("qscc", nil, "test",
-		"1", nil, nil, nil)
+		"1", nil, nil)
 	if err == nil || err.Error() != "chaincodePolicy is required" {
 		t.Fatal("Validation for chain code policy for send Instantiate Proposal failed")
 	}
 
 	tresponse, txnid, err = channel.SendInstantiateProposal("qscc", nil, "test",
-		"1", cauthdsl.SignedByMspMember("Org1MSP"), nil, targets)
+		"1", cauthdsl.SignedByMspMember("Org1MSP"), targets)
 
 	if err != nil || len(tresponse) == 0 || txnid.ID == "" {
 		t.Fatal("Send Instantiate Proposal Test failed")
 	}
 
 	tresponse, txnid, err = channel.SendInstantiateProposal("qscc", nil, "test",
-		"1", cauthdsl.SignedByMspMember("Org1MSP"), nil, nil)
+		"1", cauthdsl.SignedByMspMember("Org1MSP"), nil)
 	if err == nil || err.Error() != "missing peer objects for instantiate chaincode proposal" {
 		t.Fatal("Missing peer objects validation is not working as expected")
-	}
-
-	// Define the private data collection policy config
-	collConfig := []*common.CollectionConfig{
-		newCollectionConfig("somecollection", 1, 3, cauthdsl.SignedByAnyMember([]string{"Org1MSP", "Org2MSP"})),
-	}
-	tresponse, txnid, err = channel.SendInstantiateProposal("qscc", nil, "test",
-		"1", cauthdsl.SignedByMspMember("Org1MSP"), collConfig, targets)
-	if err != nil || len(tresponse) == 0 || txnid.ID == "" {
-		t.Fatal("Send Instantiate Proposal Test failed")
 	}
 }
 
@@ -500,22 +489,5 @@ func TestConcurrentOrderers(t *testing.T) {
 	_, err = channel.SendTransaction(&txn)
 	if err != nil {
 		t.Fatalf("SendTransaction returned error: %s", err)
-	}
-}
-
-func newCollectionConfig(collName string, requiredPeerCount, maxPeerCount int32, policy *common.SignaturePolicyEnvelope) *common.CollectionConfig {
-	return &common.CollectionConfig{
-		Payload: &common.CollectionConfig_StaticCollectionConfig{
-			StaticCollectionConfig: &common.StaticCollectionConfig{
-				Name:              collName,
-				RequiredPeerCount: requiredPeerCount,
-				MaximumPeerCount:  maxPeerCount,
-				MemberOrgsPolicy: &common.CollectionPolicyConfig{
-					Payload: &common.CollectionPolicyConfig_SignaturePolicy{
-						SignaturePolicy: policy,
-					},
-				},
-			},
-		},
 	}
 }
