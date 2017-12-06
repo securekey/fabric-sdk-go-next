@@ -7,10 +7,10 @@
 
 
 export FABRIC_CA_FIXTURE_TAG=1.0.3
-export FABRIC_ORDERER_FIXTURE_TAG=latest
-export FABRIC_PEER_FIXTURE_TAG=latest
-export FABRIC_COUCHDB_FIXTURE_TAG=latest
-export FABRIC_BUILDER_FIXTURE_TAG=latest
+export FABRIC_ORDERER_FIXTURE_TAG=1.1.0-0.0.2-snapshot-75c6339
+export FABRIC_PEER_FIXTURE_TAG=1.1.0-0.0.2-snapshot-75c6339
+export FABRIC_COUCHDB_FIXTURE_TAG=1.1.0-0.0.2-snapshot-75c6339
+export FABRIC_BUILDER_FIXTURE_TAG=1.1.0-0.0.2-snapshot-75c6339
 export FABRIC_BASEOS_FIXTURE_TAG=0.4.2
 
 export FABRIC_CA_FIXTURE_IMAGE=hyperledger/fabric-ca
@@ -40,24 +40,24 @@ mkdir -p $GOPATH/src/github.com/hyperledger/fabric-sdk-go
 cd $GOPATH/src/github.com/hyperledger/
 git clone https://gerrit.hyperledger.org/r/fabric-sdk-go
 cd fabric-sdk-go
-git checkout 55aac0283d585d5ec2506c920cbf4723a433e7e5
+git checkout f853354e1f4d3b4dc17169596425f66ad6f7fcbe
 
-
-#[FAB-6523] Bump Fabric version
-#https://gerrit.hyperledger.org/r/#/c/14321/ - [FAB-6523] Bump Fabric version
-#git fetch https://gerrit.hyperledger.org/r/fabric-sdk-go refs/changes/21/14321/21 && git cherry-pick FETCH_HEAD
+##[FAB-6523] Bump Fabric version
+#https://gerrit.hyperledger.org/r/#/c/15993/ - [FAB-6523] Bump Fabric version
+git fetch https://gerrit.hyperledger.org/r/fabric-sdk-go refs/changes/93/15993/1 && git cherry-pick FETCH_HEAD
 
 ##[FAB-6982] - Support Private Data Collection Config
-#https://gerrit.hyperledger.org/r/#/c/15475/ - [FAB-6982] - Support Private Data Collection Config
-git fetch https://gerrit.hyperledger.org/r/fabric-sdk-go refs/changes/75/15475/4 && git cherry-pick FETCH_HEAD
+#https://gerrit.hyperledger.org/r/#/c/15995/ - [FAB-6982] - Support Private Data Collection Config
+git fetch https://gerrit.hyperledger.org/r/fabric-sdk-go refs/changes/95/15995/1 && git cherry-pick FETCH_HEAD
+
 
 #export FABRIC_SDK_EXTRA_GO_TAGS=channelevents
 make all
 
-#if [ -d "$fabricSdkGoPath" ]; then
-# echo "can not copy fabric-sdk-go already exist in GOPATH"
-# exit 1
-#fi
-#cp -r $GOPATH/src/github.com/hyperledger/fabric-sdk-go $fabricSdkGoPath
+if [ -d "$fabricSdkGoPath" ]; then
+echo "can not copy fabric-sdk-go already exist in GOPATH"
+exit 1
+fi
+cp -r $GOPATH/src/github.com/hyperledger/fabric-sdk-go $fabricSdkGoPath
 
 rm -Rf $TMP
