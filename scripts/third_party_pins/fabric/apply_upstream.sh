@@ -43,6 +43,10 @@ git am ${CWD}/${PATCHES_PATH}/*
 
 cd $CWD
 
+#Applying cherrypicks
+eval "TMP_PROJECT_PATH=$TMP_PROJECT_PATH $SCRIPTS_PATH/apply_cherrypick.sh"
+
+
 # fabric client utils
 echo "Pinning and patching fabric client utils..."
 declare -a CLIENT_UTILS_IMPORT_SUBSTS=(

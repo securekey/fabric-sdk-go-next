@@ -15,6 +15,8 @@ import (
 
 	"encoding/hex"
 
+
+
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/common/crypto"
 	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/common/util"
