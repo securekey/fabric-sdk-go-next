@@ -14,12 +14,20 @@ export FABRIC_BUILDER_FIXTURE_TAG=1.1.0-0.0.2-snapshot-75c6339
 export FABRIC_BASEOS_FIXTURE_TAG=0.4.2
 
 export FABRIC_CA_FIXTURE_IMAGE=hyperledger/fabric-ca
-export FABRIC_ORDERER_FIXTURE_IMAGE=repo.onetap.ca:8443/next/hyperledger/fabric-orderer
-export FABRIC_PEER_FIXTURE_IMAGE=repo.onetap.ca:8443/next/hyperledger/fabric-peer
-export FABRIC_COUCHDB_FIXTURE_IMAGE=repo.onetap.ca:8443/next/hyperledger/fabric-couchdb
-export FABRIC_BUILDER_FIXTURE_IMAGE=repo.onetap.ca:8443/next/hyperledger/fabric-ccenv
+export FABRIC_ORDERER_FIXTURE_IMAGE=next/hyperledger/fabric-orderer
+export FABRIC_PEER_FIXTURE_IMAGE=next/hyperledger/fabric-peer
+export FABRIC_COUCHDB_FIXTURE_IMAGE=next/hyperledger/fabric-couchdb
+export FABRIC_BUILDER_FIXTURE_IMAGE=next/hyperledger/fabric-ccenv
 export FABRIC_BASEOS_FIXTURE_IMAGE=hyperledger/fabric-baseos
 export FABRIC_BASEIMAGE_FIXTURE_IMAGE=hyperledger/fabric-baseimage
+export FABRIC_RELEASE_REGISTRY=repo.onetap.ca:8443
+export FABRIC_DEV_REGISTRY=repo.onetap.ca:8443
+export FABRIC_DEV_REGISTRY_PRE_CMD=
+export FABRIC_STABLE_PKCS11_INTTEST=true
+export FABRIC_STABLE_VERSION=1.1.0
+export FABRIC_STABLE_VERSION_MINOR=1.1
+export FABRIC_STABLE_VERSION_MAJOR=1
+export FABRIC_SDK_EXTRA_GO_TAGS="devstable prerelease"
 
 
 MY_PATH="`dirname \"$0\"`"              # relative
