@@ -17,8 +17,9 @@ import (
 
 // MockConfig ...
 type MockConfig struct {
-	tlsEnabled bool
-	errorCase  bool
+	tlsEnabled       bool
+	mutualTLSEnabled bool
+	errorCase        bool
 }
 
 // NewMockConfig ...
@@ -27,13 +28,26 @@ func NewMockConfig() config.Config {
 }
 
 // NewMockConfigCustomized ...
-func NewMockConfigCustomized(tlsEnabled bool, errorCase bool) config.Config {
-	return &MockConfig{tlsEnabled: tlsEnabled, errorCase: errorCase}
+func NewMockConfigCustomized(tlsEnabled, mutualTLSEnabled, errorCase bool) config.Config {
+	return &MockConfig{tlsEnabled: tlsEnabled, mutualTLSEnabled: mutualTLSEnabled, errorCase: errorCase}
 }
 
 // Client ...
 func (c *MockConfig) Client() (*config.ClientConfig, error) {
-	return nil, nil
+	if c.mutualTLSEnabled {
+		mutualTLSCerts := config.MutualTLSConfig{
+			Client: struct {
+				KeyPem   string
+				Keyfile  string
+				CertPem  string
+				Certfile string
+			}{KeyPem: "", Keyfile: "../../../test/fixtures/config/mutual_tls/client_sdk_go-key.pem", CertPem: "", Certfile: "../../../test/fixtures/config/mutual_tls/client_sdk_go.pem"},
+		}
+
+		return &config.ClientConfig{TLSCerts: mutualTLSCerts}, nil
+	}
+
+	return &config.ClientConfig{}, nil
 }
 
 // CAConfig not implemented
@@ -46,8 +60,8 @@ func (c *MockConfig) CAServerCertPems(org string) ([]string, error) {
 	return nil, nil
 }
 
-//CAServerCertFiles Read configuration option for the server certificate files
-func (c *MockConfig) CAServerCertFiles(org string) ([]string, error) {
+//CAServerCertPaths Read configuration option for the server certificate files
+func (c *MockConfig) CAServerCertPaths(org string) ([]string, error) {
 	return nil, nil
 }
 
@@ -56,8 +70,8 @@ func (c *MockConfig) CAClientKeyPem(org string) (string, error) {
 	return "", nil
 }
 
-//CAClientKeyFile Read configuration option for the fabric CA client key file
-func (c *MockConfig) CAClientKeyFile(org string) (string, error) {
+//CAClientKeyPath Read configuration option for the fabric CA client key file
+func (c *MockConfig) CAClientKeyPath(org string) (string, error) {
 	return "", nil
 }
 
@@ -66,8 +80,8 @@ func (c *MockConfig) CAClientCertPem(org string) (string, error) {
 	return "", nil
 }
 
-//CAClientCertFile Read configuration option for the fabric CA client cert file
-func (c *MockConfig) CAClientCertFile(org string) (string, error) {
+//CAClientCertPath Read configuration option for the fabric CA client cert file
+func (c *MockConfig) CAClientCertPath(org string) (string, error) {
 	return "", nil
 }
 

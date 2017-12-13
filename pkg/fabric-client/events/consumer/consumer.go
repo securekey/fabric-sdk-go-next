@@ -25,6 +25,8 @@ import (
 	consumer "github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/events/consumer"
 	"github.com/hyperledger/fabric-sdk-go/pkg/errors"
 	"github.com/hyperledger/fabric-sdk-go/pkg/logging"
+
+	"crypto/tls"
 )
 
 var logger = logging.NewLogger("fabric_sdk_go")
@@ -67,7 +69,34 @@ func newEventsClientConnectionWithAddress(peerAddress string, certificate string
 		if err != nil {
 			return nil, err
 		}
-		creds := credentials.NewClientTLSFromCert(tlsCaCertPool, serverhostoverride)
+
+		clientConfig, err := config.Client()
+		if err != nil {
+			return nil, err
+		}
+
+		var certificates []tls.Certificate
+
+		if clientConfig.TLSCerts.Client.CertPem != "" {
+			clientCerts, err := tls.X509KeyPair([]byte(clientConfig.TLSCerts.Client.CertPem), []byte(clientConfig.TLSCerts.Client.KeyPem))
+			if err != nil {
+				return nil, errors.Errorf("Error loading cert/key pair as TLS client credentials: %v", err)
+			}
+			certificates = []tls.Certificate{clientCerts}
+		} else if clientConfig.TLSCerts.Client.Certfile != "" {
+			clientCerts, err := tls.LoadX509KeyPair(clientConfig.TLSCerts.Client.Certfile, clientConfig.TLSCerts.Client.Keyfile)
+			if err != nil {
+				return nil, errors.Errorf("Error loading cert/key pair as TLS client credentials: %v", err)
+			}
+			certificates = []tls.Certificate{clientCerts}
+		}
+
+		creds := credentials.NewTLS(&tls.Config{
+			Certificates: certificates,
+			RootCAs:      tlsCaCertPool,
+			ServerName:   serverhostoverride,
+		})
+
 		opts = append(opts, grpc.WithTransportCredentials(creds))
 	} else {
 		opts = append(opts, grpc.WithInsecure())

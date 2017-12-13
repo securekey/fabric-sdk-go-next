@@ -10,12 +10,10 @@ import (
 	"bytes"
 	"crypto/x509"
 	"encoding/pem"
-	"go/build"
 	"io/ioutil"
 	"math/rand"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -67,7 +65,12 @@ func InitConfigFromBytes(configBytes []byte, configType string) (*Config, error)
 
 	setLogLevel(myViper)
 
-	return &Config{tlsCertPool: x509.NewCertPool(), configViper: myViper}, nil
+	tlsCertPool, err := getCertPool(myViper)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Config{tlsCertPool: tlsCertPool, configViper: myViper}, nil
 }
 
 // getNewViper returns a new instance of viper
@@ -111,9 +114,25 @@ func initConfigWithCmdRoot(configFile string, cmdRootPrefix string) (*Config, er
 	}
 
 	setLogLevel(myViper)
+	tlsCertPool, err := getCertPool(myViper)
+	if err != nil {
+		return nil, err
+	}
 
 	logger.Infof("%s logging level is set to: %s", logModule, lu.LogLevelString(logging.GetLevel(logModule)))
-	return &Config{tlsCertPool: x509.NewCertPool(), configViper: myViper}, nil
+	return &Config{tlsCertPool: tlsCertPool, configViper: myViper}, nil
+}
+
+func getCertPool(myViper *viper.Viper) (*x509.CertPool, error) {
+	tlsCertPool := x509.NewCertPool()
+	if myViper.GetBool("client.tlsCerts.systemCertPool") == true {
+		var err error
+		if tlsCertPool, err = x509.SystemCertPool(); err != nil {
+			return nil, err
+		}
+		logger.Debugf("Loaded system cert pool of size: %d", len(tlsCertPool.Subjects()))
+	}
+	return tlsCertPool, nil
 }
 
 // setLogLevel will set the log level of the client
@@ -139,7 +158,7 @@ func loadDefaultConfig(myViper *viper.Viper) error {
 		return nil
 	}
 	// if set, use it to load default config
-	myViper.AddConfigPath(substGoPath(defaultPath))
+	myViper.AddConfigPath(substPathVars(defaultPath))
 	err := myViper.ReadInConfig() // Find and read the config file
 	if err != nil {               // Handle errors reading the config file
 		return errors.Wrap(err, "loading config file failed")
@@ -154,6 +173,11 @@ func (c *Config) Client() (*apiconfig.ClientConfig, error) {
 		return nil, err
 	}
 	client := config.Client
+
+	client.TLSCerts.Path = substPathVars(client.TLSCerts.Path)
+	client.TLSCerts.Client.Keyfile = substPathVars(client.TLSCerts.Client.Keyfile)
+	client.TLSCerts.Client.Certfile = substPathVars(client.TLSCerts.Client.Certfile)
+
 	return &client, nil
 }
 
@@ -196,9 +220,9 @@ func (c *Config) CAServerCertPems(org string) ([]string, error) {
 	return certPems, nil
 }
 
-// CAServerCertFiles Read configuration option for the server certificates
+// CAServerCertPaths Read configuration option for the server certificates
 // will send a list of cert file paths
-func (c *Config) CAServerCertFiles(org string) ([]string, error) {
+func (c *Config) CAServerCertPaths(org string) ([]string, error) {
 	config, err := c.NetworkConfig()
 	if err != nil {
 		return nil, err
@@ -215,7 +239,7 @@ func (c *Config) CAServerCertFiles(org string) ([]string, error) {
 
 	certFileModPath := make([]string, len(certFiles))
 	for i, v := range certFiles {
-		certFileModPath[i] = substGoPath(v)
+		certFileModPath[i] = substPathVars(v)
 	}
 
 	return certFileModPath, nil
@@ -242,8 +266,8 @@ func (c *Config) getCAName(org string) (string, error) {
 	return certAuthorityName, nil
 }
 
-// CAClientKeyFile Read configuration option for the fabric CA client key file
-func (c *Config) CAClientKeyFile(org string) (string, error) {
+// CAClientKeyPath Read configuration option for the fabric CA client key file
+func (c *Config) CAClientKeyPath(org string) (string, error) {
 	config, err := c.NetworkConfig()
 	if err != nil {
 		return "", err
@@ -256,7 +280,7 @@ func (c *Config) CAClientKeyFile(org string) (string, error) {
 	if _, ok := config.CertificateAuthorities[strings.ToLower(caName)]; !ok {
 		return "", errors.Errorf("CA Server Name '%s' not found", caName)
 	}
-	return substGoPath(config.CertificateAuthorities[strings.ToLower(caName)].TLSCACerts.Client.Keyfile), nil
+	return substPathVars(config.CertificateAuthorities[strings.ToLower(caName)].TLSCACerts.Client.Keyfile), nil
 }
 
 // CAClientKeyPem Read configuration option for the fabric CA client key pem embedded in the client config
@@ -282,8 +306,8 @@ func (c *Config) CAClientKeyPem(org string) (string, error) {
 	return ca.TLSCACerts.Client.KeyPem, nil
 }
 
-// CAClientCertFile Read configuration option for the fabric CA client cert file
-func (c *Config) CAClientCertFile(org string) (string, error) {
+// CAClientCertPath Read configuration option for the fabric CA client cert file
+func (c *Config) CAClientCertPath(org string) (string, error) {
 	config, err := c.NetworkConfig()
 	if err != nil {
 		return "", err
@@ -296,7 +320,7 @@ func (c *Config) CAClientCertFile(org string) (string, error) {
 	if _, ok := config.CertificateAuthorities[strings.ToLower(caName)]; !ok {
 		return "", errors.Errorf("CA Server Name '%s' not found", caName)
 	}
-	return substGoPath(config.CertificateAuthorities[strings.ToLower(caName)].TLSCACerts.Client.Certfile), nil
+	return substPathVars(config.CertificateAuthorities[strings.ToLower(caName)].TLSCACerts.Client.Certfile), nil
 }
 
 // CAClientCertPem Read configuration option for the fabric CA client cert pem embedded in the client config
@@ -416,9 +440,10 @@ func (c *Config) OrderersConfig() ([]apiconfig.OrdererConfig, error) {
 	}
 
 	for _, orderer := range config.Orderers {
+
 		if orderer.TLSCACerts.Path != "" {
-			orderer.TLSCACerts.Path = substGoPath(orderer.TLSCACerts.Path)
-		} else if len(orderer.TLSCACerts.Pem) == 0 {
+			orderer.TLSCACerts.Path = substPathVars(orderer.TLSCACerts.Path)
+		} else if len(orderer.TLSCACerts.Pem) == 0 && c.configViper.GetBool("client.tlsCerts.systemCertPool") == false {
 			errors.Errorf("Orderer has no certs configured. Make sure TLSCACerts.Pem or TLSCACerts.Path is set for %s", orderer.URL)
 		}
 
@@ -460,7 +485,7 @@ func (c *Config) OrdererConfig(name string) (*apiconfig.OrdererConfig, error) {
 	}
 
 	if orderer.TLSCACerts.Path != "" {
-		orderer.TLSCACerts.Path = substGoPath(orderer.TLSCACerts.Path)
+		orderer.TLSCACerts.Path = substPathVars(orderer.TLSCACerts.Path)
 	}
 
 	return &orderer, nil
@@ -479,11 +504,11 @@ func (c *Config) PeersConfig(org string) ([]apiconfig.PeerConfig, error) {
 
 	for _, peerName := range peersConfig {
 		p := config.Peers[strings.ToLower(peerName)]
-		if err = verifyPeerConfig(p, peerName, urlutil.IsTLSEnabled(p.URL)); err != nil {
+		if err = c.verifyPeerConfig(p, peerName, urlutil.IsTLSEnabled(p.URL)); err != nil {
 			return nil, err
 		}
 		if p.TLSCACerts.Path != "" {
-			p.TLSCACerts.Path = substGoPath(p.TLSCACerts.Path)
+			p.TLSCACerts.Path = substPathVars(p.TLSCACerts.Path)
 		}
 
 		peers = append(peers, p)
@@ -515,7 +540,7 @@ func (c *Config) PeerConfig(org string, name string) (*apiconfig.PeerConfig, err
 	}
 
 	if peerConfig.TLSCACerts.Path != "" {
-		peerConfig.TLSCACerts.Path = substGoPath(peerConfig.TLSCACerts.Path)
+		peerConfig.TLSCACerts.Path = substPathVars(peerConfig.TLSCACerts.Path)
 	}
 	return &peerConfig, nil
 }
@@ -591,12 +616,12 @@ func (c *Config) ChannelPeers(name string) ([]apiconfig.ChannelPeer, error) {
 			return nil, errors.Errorf("peer config not found for %s", peerName)
 		}
 
-		if err = verifyPeerConfig(p, peerName, urlutil.IsTLSEnabled(p.URL)); err != nil {
+		if err = c.verifyPeerConfig(p, peerName, urlutil.IsTLSEnabled(p.URL)); err != nil {
 			return nil, err
 		}
 
 		if p.TLSCACerts.Path != "" {
-			p.TLSCACerts.Path = substGoPath(p.TLSCACerts.Path)
+			p.TLSCACerts.Path = substPathVars(p.TLSCACerts.Path)
 		}
 
 		mspID, err := c.PeerMspID(peerName)
@@ -626,12 +651,12 @@ func (c *Config) NetworkPeers() ([]apiconfig.NetworkPeer, error) {
 
 	for name, p := range netConfig.Peers {
 
-		if err = verifyPeerConfig(p, name, urlutil.IsTLSEnabled(p.URL)); err != nil {
+		if err = c.verifyPeerConfig(p, name, urlutil.IsTLSEnabled(p.URL)); err != nil {
 			return nil, err
 		}
 
 		if p.TLSCACerts.Path != "" {
-			p.TLSCACerts.Path = substGoPath(p.TLSCACerts.Path)
+			p.TLSCACerts.Path = substPathVars(p.TLSCACerts.Path)
 		}
 
 		mspID, err := c.PeerMspID(name)
@@ -670,14 +695,14 @@ func (c *Config) PeerMspID(name string) (string, error) {
 
 }
 
-func verifyPeerConfig(p apiconfig.PeerConfig, peerName string, tlsEnabled bool) error {
+func (c *Config) verifyPeerConfig(p apiconfig.PeerConfig, peerName string, tlsEnabled bool) error {
 	if p.URL == "" {
 		return errors.Errorf("URL does not exist or empty for peer %s", peerName)
 	}
 	if p.EventURL == "" {
 		return errors.Errorf("event URL does not exist or empty for peer %s", peerName)
 	}
-	if tlsEnabled && len(p.TLSCACerts.Pem) == 0 && p.TLSCACerts.Path == "" {
+	if tlsEnabled && len(p.TLSCACerts.Pem) == 0 && p.TLSCACerts.Path == "" && c.configViper.GetBool("client.tlsCerts.systemCertPool") == false {
 		return errors.Errorf("tls.certificate does not exist or empty for peer %s", peerName)
 	}
 	return nil
@@ -774,7 +799,7 @@ func (c *Config) SecurityProviderLabel() string {
 
 // KeyStorePath returns the keystore path used by BCCSP
 func (c *Config) KeyStorePath() string {
-	keystorePath := substGoPath(c.configViper.GetString("client.credentialStore.cryptoStore.path"))
+	keystorePath := substPathVars(c.configViper.GetString("client.credentialStore.cryptoStore.path"))
 	return path.Join(keystorePath, "keystore")
 }
 
@@ -782,12 +807,12 @@ func (c *Config) KeyStorePath() string {
 // 'keystore' directory added. This is done because the fabric-ca-client
 // adds this to the path
 func (c *Config) CAKeyStorePath() string {
-	return substGoPath(c.configViper.GetString("client.credentialStore.cryptoStore.path"))
+	return substPathVars(c.configViper.GetString("client.credentialStore.cryptoStore.path"))
 }
 
 // CryptoConfigPath ...
 func (c *Config) CryptoConfigPath() string {
-	return substGoPath(c.configViper.GetString("client.cryptoconfig.path"))
+	return substPathVars(c.configViper.GetString("client.cryptoconfig.path"))
 }
 
 // loadCAKey
@@ -803,13 +828,4 @@ func loadCAKey(rawData []byte) (*x509.Certificate, error) {
 		return pub, nil
 	}
 	return nil, errors.New("pem data missing")
-}
-
-// substGoPath replaces instances of '$GOPATH' with the GOPATH. If the system
-// has multiple GOPATHs then the first is used.
-func substGoPath(s string) string {
-	gpDefault := build.Default.GOPATH
-	gps := filepath.SplitList(gpDefault)
-
-	return strings.Replace(s, "$GOPATH", gps[0], -1)
 }
