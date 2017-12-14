@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package peer
 
 import (
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
 	"io/ioutil"
@@ -49,12 +50,11 @@ func TestNewPeerTLSFromCert(t *testing.T) {
 
 	certPool := x509.NewCertPool()
 	url := "grpcs://0.0.0.0:1234"
-	clientConfig := &apiconfig.ClientConfig{}
 
 	config.EXPECT().TLSCACertPool("cert").Return(certPool, nil)
 	config.EXPECT().TLSCACertPool("").Return(certPool, nil)
 	config.EXPECT().TimeoutOrDefault(apiconfig.Endorser).Return(time.Second * 5)
-	config.EXPECT().Client().Return(clientConfig, nil)
+	config.EXPECT().TLSClientCerts().Return([]tls.Certificate{}, nil)
 
 	// TODO - test actual parameters and test server name override
 	_, err := NewPeerTLSFromCert(url, "cert", "", config)

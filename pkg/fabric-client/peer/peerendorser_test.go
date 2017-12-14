@@ -7,6 +7,7 @@ SPDX-License-Identifier: Apache-2.0
 package peer
 
 import (
+	"crypto/tls"
 	"crypto/x509"
 	"net"
 	"reflect"
@@ -43,12 +44,11 @@ func TestNewPeerEndorserTLS(t *testing.T) {
 
 	url := "grpcs://0.0.0.0:1234"
 	certPool := x509.NewCertPool()
-	clientConfig := &apiconfig.ClientConfig{}
 
 	config.EXPECT().TLSCACertPool("cert").Return(certPool, nil)
 	config.EXPECT().TLSCACertPool("").Return(certPool, nil)
 	config.EXPECT().TimeoutOrDefault(apiconfig.Endorser).Return(time.Second * 5)
-	config.EXPECT().Client().Return(clientConfig, nil)
+	config.EXPECT().TLSClientCerts().Return([]tls.Certificate{}, nil)
 
 	conn, err := newPeerEndorser(url, "cert", "", true, config)
 	if err != nil {
@@ -70,23 +70,22 @@ func TestNewPeerEndorserMutualTLS(t *testing.T) {
 	defer mockCtrl.Finish()
 	config := mock_apiconfig.NewMockConfig(mockCtrl)
 
-	mutualTLSCerts := apiconfig.MutualTLSConfig{
-		Client: struct {
-			KeyPem   string
-			Keyfile  string
-			CertPem  string
-			Certfile string
-		}{KeyPem: "", Keyfile: "../../../test/fixtures/config/mutual_tls/client_sdk_go-key.pem", CertPem: "", Certfile: "../../../test/fixtures/config/mutual_tls/client_sdk_go.pem"},
-	}
+	//mutualTLSCerts := apiconfig.MutualTLSConfig{
+	//	Client: struct {
+	//		KeyPem   string
+	//		Keyfile  string
+	//		CertPem  string
+	//		Certfile string
+	//	}{KeyPem: "", Keyfile: "../../../test/fixtures/config/mutual_tls/client_sdk_go-key.pem", CertPem: "", Certfile: "../../../test/fixtures/config/mutual_tls/client_sdk_go.pem"},
+	//}
 
 	url := "grpcs://0.0.0.0:1234"
 	certPool := x509.NewCertPool()
-	clientConfig := &apiconfig.ClientConfig{TLSCerts: mutualTLSCerts}
 
 	config.EXPECT().TLSCACertPool("cert").Return(certPool, nil)
 	config.EXPECT().TLSCACertPool("").Return(certPool, nil)
 	config.EXPECT().TimeoutOrDefault(apiconfig.Endorser).Return(time.Second * 5)
-	config.EXPECT().Client().Return(clientConfig, nil)
+	config.EXPECT().TLSClientCerts().Return([]tls.Certificate{}, nil)
 
 	conn, err := newPeerEndorser(url, "cert", "", true, config)
 	if err != nil {
@@ -110,12 +109,11 @@ func TestNewPeerEndorserMutualTLSNoClientCerts(t *testing.T) {
 
 	url := "grpcs://0.0.0.0:1234"
 	certPool := x509.NewCertPool()
-	clientConfig := &apiconfig.ClientConfig{}
 
 	config.EXPECT().TLSCACertPool("cert").Return(certPool, nil)
 	config.EXPECT().TLSCACertPool("").Return(certPool, nil)
 	config.EXPECT().TimeoutOrDefault(apiconfig.Endorser).Return(time.Second * 5)
-	config.EXPECT().Client().Return(clientConfig, nil)
+	config.EXPECT().TLSClientCerts().Return([]tls.Certificate{}, nil)
 
 	_, err := newPeerEndorser(url, "cert", "", true, config)
 	if err != nil {

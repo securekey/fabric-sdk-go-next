@@ -8,6 +8,7 @@ package config
 
 import (
 	"bytes"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
 	"io/ioutil"
@@ -813,6 +814,35 @@ func (c *Config) CAKeyStorePath() string {
 // CryptoConfigPath ...
 func (c *Config) CryptoConfigPath() string {
 	return substPathVars(c.configViper.GetString("client.cryptoconfig.path"))
+}
+
+// TLSClientCerts loads the client's certs for mutual TLS
+// It checks the config for embedded pem files before looking for cert files
+func (c *Config) TLSClientCerts() ([]tls.Certificate, error) {
+	config, err := c.NetworkConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	clientConfig := config.Client
+	var clientCerts tls.Certificate
+
+	if clientConfig.TLSCerts.Client.CertPem != "" {
+		clientCerts, err = tls.X509KeyPair([]byte(clientConfig.TLSCerts.Client.CertPem), []byte(clientConfig.TLSCerts.Client.KeyPem))
+		if err != nil {
+			return nil, errors.Errorf("Error loading cert/key pair as TLS client credentials: %v", err)
+		}
+
+	} else if clientConfig.TLSCerts.Client.Certfile != "" {
+		clientConfig.TLSCerts.Client.Keyfile = substPathVars(clientConfig.TLSCerts.Client.Keyfile)
+		clientConfig.TLSCerts.Client.Certfile = substPathVars(clientConfig.TLSCerts.Client.Certfile)
+		clientCerts, err = tls.LoadX509KeyPair(clientConfig.TLSCerts.Client.Certfile, clientConfig.TLSCerts.Client.Keyfile)
+		if err != nil {
+			return nil, errors.Errorf("Error loading cert/key pair as TLS client credentials: %v", err)
+		}
+	}
+
+	return []tls.Certificate{clientCerts}, nil
 }
 
 // loadCAKey

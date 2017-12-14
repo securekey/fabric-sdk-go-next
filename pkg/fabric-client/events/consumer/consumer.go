@@ -18,6 +18,7 @@ import (
 
 	apiconfig "github.com/hyperledger/fabric-sdk-go/api/apiconfig"
 	fab "github.com/hyperledger/fabric-sdk-go/api/apifabclient"
+	"github.com/hyperledger/fabric-sdk-go/pkg/config/comm"
 	"github.com/hyperledger/fabric-sdk-go/pkg/config/urlutil"
 	"github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/protos/peer"
 	ehpb "github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/protos/peer"
@@ -25,8 +26,6 @@ import (
 	consumer "github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/events/consumer"
 	"github.com/hyperledger/fabric-sdk-go/pkg/errors"
 	"github.com/hyperledger/fabric-sdk-go/pkg/logging"
-
-	"crypto/tls"
 )
 
 var logger = logging.NewLogger("fabric_sdk_go")
@@ -61,43 +60,16 @@ func NewEventsClient(client fab.FabricClient, peerAddress string, certificate st
 }
 
 //newEventsClientConnectionWithAddress Returns a new grpc.ClientConn to the configured local PEER.
-func newEventsClientConnectionWithAddress(peerAddress string, certificate string, serverhostoverride string, config apiconfig.Config) (*grpc.ClientConn, error) {
+func newEventsClientConnectionWithAddress(peerAddress string, certificate string, serverHostOverride string, config apiconfig.Config) (*grpc.ClientConn, error) {
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithTimeout(config.TimeoutOrDefault(apiconfig.EventHub)))
 	if urlutil.IsTLSEnabled(peerAddress) {
-		tlsCaCertPool, err := config.TLSCACertPool(certificate)
+		tlsConfig, err := comm.TLSConfig(certificate, serverHostOverride, config)
 		if err != nil {
 			return nil, err
 		}
 
-		clientConfig, err := config.Client()
-		if err != nil {
-			return nil, err
-		}
-
-		var certificates []tls.Certificate
-
-		if clientConfig.TLSCerts.Client.CertPem != "" {
-			clientCerts, err := tls.X509KeyPair([]byte(clientConfig.TLSCerts.Client.CertPem), []byte(clientConfig.TLSCerts.Client.KeyPem))
-			if err != nil {
-				return nil, errors.Errorf("Error loading cert/key pair as TLS client credentials: %v", err)
-			}
-			certificates = []tls.Certificate{clientCerts}
-		} else if clientConfig.TLSCerts.Client.Certfile != "" {
-			clientCerts, err := tls.LoadX509KeyPair(clientConfig.TLSCerts.Client.Certfile, clientConfig.TLSCerts.Client.Keyfile)
-			if err != nil {
-				return nil, errors.Errorf("Error loading cert/key pair as TLS client credentials: %v", err)
-			}
-			certificates = []tls.Certificate{clientCerts}
-		}
-
-		creds := credentials.NewTLS(&tls.Config{
-			Certificates: certificates,
-			RootCAs:      tlsCaCertPool,
-			ServerName:   serverhostoverride,
-		})
-
-		opts = append(opts, grpc.WithTransportCredentials(creds))
+		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
 	} else {
 		opts = append(opts, grpc.WithInsecure())
 	}
