@@ -48,7 +48,7 @@ mkdir -p $GOPATH/src/github.com/hyperledger/fabric-sdk-go
 cd $GOPATH/src/github.com/hyperledger/
 git clone https://gerrit.hyperledger.org/r/fabric-sdk-go
 cd fabric-sdk-go
-git checkout 3651028a078a1dfa8028866ea37cd0648e95599d
+git checkout 987d9fdd49bc98cf953c92f40b093b30fbddd384
 
 ##[FAB-6523] Bump Fabric version
 #https://gerrit.hyperledger.org/r/#/c/15993/ - [FAB-6523] Bump Fabric version
@@ -58,10 +58,6 @@ git fetch https://gerrit.hyperledger.org/r/fabric-sdk-go refs/changes/93/15993/1
 #https://gerrit.hyperledger.org/r/#/c/15995/ - [FAB-6982] - Support Private Data Collection Config
 git fetch https://gerrit.hyperledger.org/r/fabric-sdk-go refs/changes/95/15995/1 && git cherry-pick FETCH_HEAD
 
-
-##[FAB-6805] - Mutual TLS
-#https://gerrit.hyperledger.org/r/#/c/16049/
-git fetch https://gerrit.hyperledger.org/r/fabric-sdk-go refs/changes/49/16049/6 && git cherry-pick FETCH_HEAD
 
 
 #export FABRIC_SDK_EXTRA_GO_TAGS=channelevents
