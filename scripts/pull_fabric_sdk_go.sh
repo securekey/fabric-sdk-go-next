@@ -59,6 +59,9 @@ git fetch https://gerrit.hyperledger.org/r/fabric-sdk-go refs/changes/93/15993/1
 git fetch https://gerrit.hyperledger.org/r/fabric-sdk-go refs/changes/95/15995/1 && git cherry-pick FETCH_HEAD
 
 
+git fetch https://gerrit.hyperledger.org/r/fabric-sdk-go refs/changes/91/16391/2 && git cherry-pick FETCH_HEAD
+
+
 
 #export FABRIC_SDK_EXTRA_GO_TAGS=channelevents
 make all
