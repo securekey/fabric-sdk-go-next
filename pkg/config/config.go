@@ -826,23 +826,55 @@ func (c *Config) TLSClientCerts() ([]tls.Certificate, error) {
 
 	clientConfig := config.Client
 	var clientCerts tls.Certificate
-
+	var cb, kb []byte
 	if clientConfig.TLSCerts.Client.CertPem != "" {
-		clientCerts, err = tls.X509KeyPair([]byte(clientConfig.TLSCerts.Client.CertPem), []byte(clientConfig.TLSCerts.Client.KeyPem))
-		if err != nil {
-			return nil, errors.Errorf("Error loading cert/key pair as TLS client credentials: %v", err)
-		}
-
+		cb = []byte(clientConfig.TLSCerts.Client.CertPem)
 	} else if clientConfig.TLSCerts.Client.Certfile != "" {
-		clientConfig.TLSCerts.Client.Keyfile = substPathVars(clientConfig.TLSCerts.Client.Keyfile)
-		clientConfig.TLSCerts.Client.Certfile = substPathVars(clientConfig.TLSCerts.Client.Certfile)
-		clientCerts, err = tls.LoadX509KeyPair(clientConfig.TLSCerts.Client.Certfile, clientConfig.TLSCerts.Client.Keyfile)
+		cb, err = loadByteKeyOrCertFromFile(&clientConfig, false)
 		if err != nil {
-			return nil, errors.Errorf("Error loading cert/key pair as TLS client credentials: %v", err)
+			return nil, errors.Wrapf(err, "Failed to load cert from file path '%s'", clientConfig.TLSCerts.Client.Certfile)
 		}
 	}
 
+	if clientConfig.TLSCerts.Client.KeyPem != "" {
+		kb = []byte(clientConfig.TLSCerts.Client.KeyPem)
+	} else if clientConfig.TLSCerts.Client.Keyfile != "" {
+		kb, err = loadByteKeyOrCertFromFile(&clientConfig, true)
+		if err != nil {
+			return nil, errors.Wrapf(err, "Failed to load key from file path '%s'", clientConfig.TLSCerts.Client.Keyfile)
+		}
+	}
+
+	if len(cb) == 0 && len(kb) == 0 {
+		// if no cert found in the config, return empty cert chain
+		return []tls.Certificate{clientCerts}, nil
+	}
+
+	// load the key/cert pair from []byte
+	clientCerts, err = tls.X509KeyPair(cb, kb)
+	if err != nil {
+		return nil, errors.Errorf("Error loading cert/key pair as TLS client credentials: %v", err)
+	}
+
 	return []tls.Certificate{clientCerts}, nil
+}
+
+func loadByteKeyOrCertFromFile(c *apiconfig.ClientConfig, isKey bool) ([]byte, error) {
+	var path string
+	a := "key"
+	if isKey {
+		path = substPathVars(c.TLSCerts.Client.Keyfile)
+		c.TLSCerts.Client.Keyfile = path
+	} else {
+		a = "cert"
+		path = substPathVars(c.TLSCerts.Client.Certfile)
+		c.TLSCerts.Client.Certfile = path
+	}
+	bts, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, errors.Errorf("Error loading %s file from '%s' err: %v", a, path, err)
+	}
+	return bts, nil
 }
 
 // loadCAKey
