@@ -48,7 +48,7 @@ mkdir -p $GOPATH/src/github.com/hyperledger/fabric-sdk-go
 cd $GOPATH/src/github.com/hyperledger/
 git clone https://gerrit.hyperledger.org/r/fabric-sdk-go
 cd fabric-sdk-go
-git checkout 893b60adf4c7a34b8735454f2a85e2d6e0d12b17
+git checkout 035e4f9b90c2d31813d2556c9607cf0c24fe4b1a
 
 ##[FAB-6523] Bump Fabric version
 #https://gerrit.hyperledger.org/r/#/c/15993/ - [FAB-6523] Bump Fabric version
