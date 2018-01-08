@@ -8,6 +8,7 @@ SPDX-License-Identifier: Apache-2.0
 package chclient
 
 import (
+	"bytes"
 	"reflect"
 	"time"
 
@@ -28,6 +29,30 @@ type ChannelClient struct {
 	discovery fab.DiscoveryService
 	selection fab.SelectionService
 	eventHub  fab.EventHub
+}
+
+// txProposalResponseFilter process transaction proposal response
+type txProposalResponseFilter struct {
+}
+
+// ProcessTxProposalResponse process transaction proposal response
+func (txProposalResponseFilter *txProposalResponseFilter) ProcessTxProposalResponse(txProposalResponse []*apitxn.TransactionProposalResponse) ([]*apitxn.TransactionProposalResponse, error) {
+	var a1 []byte
+	for n, r := range txProposalResponse {
+		if r.ProposalResponse.GetResponse().Status != 200 {
+			return nil, errors.Errorf("proposal response was not successful, error code %d, msg %s", r.ProposalResponse.GetResponse().Status, r.ProposalResponse.GetResponse().Message)
+		}
+		if n == 0 {
+			a1 = r.ProposalResponse.GetResponse().Payload
+			continue
+		}
+
+		if bytes.Compare(a1, r.ProposalResponse.GetResponse().Payload) != 0 {
+			return nil, errors.Errorf("ProposalResponsePayloads do not match")
+		}
+	}
+
+	return txProposalResponse, nil
 }
 
 // NewChannelClient returns a ChannelClient instance.
@@ -74,7 +99,7 @@ func (cc *ChannelClient) QueryWithOpts(request apitxn.QueryRequest, opts apitxn.
 		txProcessors = peer.PeersToTxnProcessors(endorsers)
 	}
 
-	go sendTransactionProposal(request, cc.channel, txProcessors, notifier)
+	go sendTransactionProposal(request, cc.channel, txProcessors, opts.TxFilter, notifier)
 
 	if opts.Notifier != nil {
 		return nil, nil
@@ -94,13 +119,23 @@ func (cc *ChannelClient) QueryWithOpts(request apitxn.QueryRequest, opts apitxn.
 
 }
 
-func sendTransactionProposal(request apitxn.QueryRequest, channel fab.Channel, proposalProcessors []apitxn.ProposalProcessor, notifier chan apitxn.QueryResponse) {
+func sendTransactionProposal(request apitxn.QueryRequest, channel fab.Channel, proposalProcessors []apitxn.ProposalProcessor, txFilter apitxn.TxProposalResponseFilter, notifier chan apitxn.QueryResponse) {
 
 	transactionProposalResponses, _, err := internal.CreateAndSendTransactionProposal(channel,
 		request.ChaincodeID, request.Fcn, request.Args, proposalProcessors, nil)
 
 	if err != nil {
 		notifier <- apitxn.QueryResponse{Response: nil, Error: err}
+		return
+	}
+
+	if txFilter == nil {
+		txFilter = &txProposalResponseFilter{}
+	}
+
+	transactionProposalResponses, err = txFilter.ProcessTxProposalResponse(transactionProposalResponses)
+	if err != nil {
+		notifier <- apitxn.QueryResponse{Response: nil, Error: errors.WithMessage(err, "TxFilter failed")}
 		return
 	}
 
@@ -146,11 +181,13 @@ func (cc *ChannelClient) ExecuteTxWithOpts(request apitxn.ExecuteTxRequest, opts
 		return apitxn.TransactionID{}, errors.WithMessage(err, "CreateAndSendTransactionProposal failed")
 	}
 
-	if opts.TxFilter != nil {
-		txProposalResponses, err = opts.TxFilter.ProcessTxProposalResponse(txProposalResponses)
-		if err != nil {
-			return txID, errors.WithMessage(err, "TxFilter failed")
-		}
+	if opts.TxFilter == nil {
+		opts.TxFilter = &txProposalResponseFilter{}
+	}
+
+	txProposalResponses, err = opts.TxFilter.ProcessTxProposalResponse(txProposalResponses)
+	if err != nil {
+		return txID, errors.WithMessage(err, "TxFilter failed")
 	}
 
 	notifier := opts.Notifier

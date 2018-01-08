@@ -18,9 +18,12 @@ FABRIC_SDKGO_CODELEVEL_TAG="${FABRIC_SDKGO_CODELEVEL_TAG:-stable}"
 FABRIC_CRYPTOCONFIG_VERSION="${FABRIC_CRYPTOCONFIG_VERSION:-v1}"
 # TODO: better default handling for FABRIC_CRYPTOCONFIG_VERSION
 
+REPO="github.com/hyperledger/fabric-sdk-go"
+
 # Packages to include in test run
-PKGS=`$GO_CMD list github.com/hyperledger/fabric-sdk-go/test/integration/... 2> /dev/null | \
-                                                  grep -v /vendor/`
+PKGS=`$GO_CMD list $REPO/test/integration/... 2> /dev/null | \
+      grep -v ^$REPO/test/integration/pkcs11 | \
+      grep -v ^$REPO/test/integration\$`
 
 echo "Running integration tests ..."
 RACEFLAG=""
@@ -35,8 +38,8 @@ GO_TAGS="$GO_TAGS $FABRIC_SDKGO_CODELEVEL_TAG"
 
 if [ "$FABRIC_SDK_CLIENT_BCCSP_SECURITY_DEFAULT_PROVIDER" == "PKCS11" ]; then
     echo "Testing with PKCS11 ..."
-    GO_TAGS="$GO_TAGS testpkcs11"
+    PKGS="$REPO/test/integration/pkcs11"
 fi
 
 GO_LDFLAGS="$GO_LDFLAGS -X github.com/hyperledger/fabric-sdk-go/test/metadata.ChannelConfigPath=test/fixtures/fabric/${FABRIC_SDKGO_CODELEVEL_VER}/channel -X github.com/hyperledger/fabric-sdk-go/test/metadata.CryptoConfigPath=test/fixtures/fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config"
-$GO_CMD test $RACEFLAG -cover -tags "$GO_TAGS" $GO_TESTFLAGS -ldflags="$GO_LDFLAGS" $PKGS -p 1 -timeout=40m
+$GO_CMD test $RACEFLAG -tags "$GO_TAGS" $GO_TESTFLAGS -ldflags="$GO_LDFLAGS" $PKGS -p 1 -timeout=40m

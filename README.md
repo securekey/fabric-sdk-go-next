@@ -22,9 +22,10 @@ You're good to go, happy coding! Check out the examples for usage demonstrations
 
 ### Examples
 
-- [E2E Test](test/integration/e2e/end_to_end_test.go): Basic example that uses SDK to query and execute transaction
+- [E2E Test](test/integration/e2e/end_to_end.go): Basic example that uses SDK to query and execute transaction
 - [Multi Org Test](test/integration/orgs/multiple_orgs_test.go): An example that has multiple organisations involved in transaction
 - [Dynamic Endorser Selection](test/integration/sdk/sdk_provider_test.go): An example that uses dynamic endorser selection (based on chaincode policy) 
+- [E2E PKCS11 Test](test/integration/pkcs11/e2e_test.go): E2E Test using a PKCS11 crypto suite and configuration
 - [CLI](https://github.com/securekey/fabric-examples/tree/master/fabric-cli/): An example CLI for Fabric built with the Go SDK.
 - More examples needed!
 
@@ -65,6 +66,10 @@ make
 # Clean test suite run artifacts
 make clean
 ```
+
+### Go Tags
+The following Go tags can be supplied to enable additional functionality:
+- experimental: includes support for experimental features.
 
 ## Contributing to the Go SDK
 

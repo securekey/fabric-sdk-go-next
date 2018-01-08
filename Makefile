@@ -65,7 +65,7 @@ FABRIC_DEV_REGISTRY_PRE_CMD ?= docker login -u docker -p docker nexus3.hyperledg
 THIRDPARTY_FABRIC_CA_BRANCH ?= master
 THIRDPARTY_FABRIC_CA_COMMIT ?= v1.1.0-preview
 THIRDPARTY_FABRIC_BRANCH    ?= master
-THIRDPARTY_FABRIC_COMMIT    ?= 8cad01d9f6ca890a8e09218c20ceabb9eea34103
+THIRDPARTY_FABRIC_COMMIT    ?= d783a0d569a155543c2e268cd14fad2d8aef34e9
 
 # Force removal of images in cleanup (overridable)
 FIXTURE_DOCKER_REMOVE_FORCE ?= false
@@ -127,12 +127,6 @@ GO_DEP_COMMIT := v0.3.1
 # The version of mockgen that will be installed by depend-install
 GO_MOCKGEN_COMMIT := v1.0.0
 
-# Setup Go Tags
-GO_TAGS := $(FABRIC_SDK_EXTRA_GO_TAGS)
-ifeq ($(FABRIC_SDK_EXPERIMENTAL),true)
-GO_TAGS += experimental
-endif
-
 # Detect CI
 # TODO introduce nightly and adjust verify
 ifdef JENKINS_URL
@@ -143,6 +137,12 @@ FABRIC_STABLE_PKCS11_INTTEST := true
 FABRIC_PREV_INTTEST          := true
 FABRIC_PRERELEASE_INTTEST    := true
 FABRIC_DEVSTABLE_INTTEST     := true
+endif
+
+# Setup Go Tags
+GO_TAGS := $(FABRIC_SDK_EXTRA_GO_TAGS)
+ifeq ($(FABRIC_SDK_EXPERIMENTAL),true)
+GO_TAGS += experimental
 endif
 
 # Detect subtarget execution
@@ -208,6 +208,11 @@ unit-test: checks depend populate
 
 .PHONY: unit-tests
 unit-tests: unit-test
+
+.PHONY: unit-tests-pkcs11
+unit-tests-pkcs11: checks depend populate
+	@FABRIC_SDKGO_CODELEVEL=$(FABRIC_CODELEVEL_UNITTEST_TAG) FABRIC_SDKGO_CODELEVEL_VER=$(FABRIC_CODELEVEL_UNITTEST_VER) $(TEST_SCRIPTS_PATH)/unit-pkcs11.sh
+
 
 .PHONY: integration-tests-stable
 integration-tests-stable: clean depend populate

@@ -19,7 +19,9 @@ GOFILTER_CMD="go run scripts/_go/cmd/gofilter/gofilter.go"
 declare -a PKGS=(
 
     "bccsp"
-    "bccsp/factory"
+    "bccsp/factory/sw"
+    "bccsp/factory/pkcs11"
+    "bccsp/factory/plugin"
     "bccsp/pkcs11"
     "bccsp/signer"
     "bccsp/sw"
@@ -35,9 +37,6 @@ declare -a PKGS=(
     "sdkpatch/logbridge"
     "sdkpatch/cryptosuitebridge"
 
-    "core/common/ccprovider"
-
-    "core/ledger/kvledger/txmgmt/rwsetutil"
     "core/ledger/kvledger/txmgmt/version"
     "core/ledger/util"
 
@@ -58,14 +57,9 @@ declare -a FILES=(
     "bccsp/opts.go"
     "bccsp/rsaopts.go"
 
-    "bccsp/factory/factory.go"
-    "bccsp/factory/nopkcs11.go"
-    "bccsp/factory/opts.go"
-    "bccsp/factory/pkcs11.go"
-    "bccsp/factory/pkcs11factory.go"
-    "bccsp/factory/swfactory.go"
-    "bccsp/factory/pluginfactory.go"
-    "bccsp/factory/sdkpatch_pluginfactory_noplugin.go"
+    "bccsp/factory/pkcs11/pkcs11factory.go"
+    "bccsp/factory/sw/swfactory.go"
+    "bccsp/factory/plugin/pluginfactory.go"
 
     "bccsp/pkcs11/conf.go"
     "bccsp/pkcs11/ecdsa.go"
@@ -111,15 +105,12 @@ declare -a FILES=(
     "common/channelconfig/organization.go"
 
     "common/ledger/ledger_interface.go"
-    "core/common/ccprovider/ccprovider.go"
     
     "sdkpatch/logbridge/logbridge.go"
     "sdkpatch/cryptosuitebridge/cryptosuitebridge.go"
 
     "core/ledger/ledger_interface.go"
-    "core/ledger/kvledger/txmgmt/rwsetutil/rwset_proto_util.go"
     "core/ledger/kvledger/txmgmt/version/version.go"
-    "core/ledger/util/txvalidationflags.go"
 
 
     "events/consumer/adapter.go"
@@ -209,23 +200,10 @@ FILTER_FILENAME="common/channelconfig/organization.go"
 FILTER_FN=
 gofilter
 
-FILTER_FILENAME="core/ledger/kvledger/txmgmt/rwsetutil/rwset_proto_util.go"
-FILTER_FN="NewHeight,ToProtoBytes,toProtoMsg"
-gofilter
-
 FILTER_FILENAME="core/ledger/kvledger/txmgmt/version/version.go"
 FILTER_FN=
 gofilter
 
-FILTER_FILENAME="core/ledger/util/txvalidationflags.go"
-FILTER_FN="IsValid,IsInvalid,Flag,IsSetTo,NewTxValidationFlags"
-gofilter
-
-
-FILTER_FILENAME="core/common/ccprovider/ccprovider.go"
-FILTER_FN=Reset,String,ProtoMessage
-gofilter
-sed -i'' -e 's/var ccInfoCache = NewCCInfoCache(ccInfoFSProvider)//g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
 
 FILTER_FILENAME="events/consumer/adapter.go"
 FILTER_FN=
@@ -315,6 +293,33 @@ gofilter
 FILTER_FILENAME="msp/mgmt/mgmt.go"
 FILTER_FN="GetLocalMSP"
 gofilter
+
+# Split BCCSP factory into subpackages
+mkdir ${TMP_PROJECT_PATH}/bccsp/factory/sw
+mkdir ${TMP_PROJECT_PATH}/bccsp/factory/pkcs11
+mkdir ${TMP_PROJECT_PATH}/bccsp/factory/plugin
+mv ${TMP_PROJECT_PATH}/bccsp/factory/swfactory.go ${TMP_PROJECT_PATH}/bccsp/factory/sw/swfactory.go
+mv ${TMP_PROJECT_PATH}/bccsp/factory/pkcs11factory.go ${TMP_PROJECT_PATH}/bccsp/factory/pkcs11/pkcs11factory.go
+mv ${TMP_PROJECT_PATH}/bccsp/factory/pluginfactory.go ${TMP_PROJECT_PATH}/bccsp/factory/plugin/pluginfactory.go
+
+FILTER_FILENAME="bccsp/factory/pkcs11/pkcs11factory.go"
+sed -i'' -e '/\+build !nopkcs11/d' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e 's/package factory/package pkcs11/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e 's/config \*FactoryOpts/p11Opts \*pkcs11.PKCS11Opts/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e 's/if config == nil || config.Pkcs11Opts == nil/if p11Opts == nil/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e '/p11Opts := config.Pkcs11Opts/d' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+
+FILTER_FILENAME="bccsp/factory/sw/swfactory.go"
+sed -i'' -e 's/package factory/package sw/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e 's/config \*FactoryOpts/swOpts \*SwOpts/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e 's/if config == nil || config.SwOpts == nil/if swOpts == nil/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e '/swOpts := config.SwOpts/d' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+
+FILTER_FILENAME="bccsp/factory/plugin/pluginfactory.go"
+sed -i'' -e 's/package factory/package plugin/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e 's/config \*FactoryOpts/pluginOpts \*PluginOpts/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e 's/if config == nil || config.PluginOpts == nil/if pluginOpts == nil/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
+sed -i'' -e 's/config.PluginOpts./pluginOpts./g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
 
 echo "Filtering Go sources for allowed declarations ..."
 FILTERS_ENABLED="gen,type"

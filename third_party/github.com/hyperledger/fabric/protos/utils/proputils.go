@@ -15,8 +15,6 @@ import (
 
 	"encoding/hex"
 
-
-
 	"github.com/golang/protobuf/proto"
 	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/common/crypto"
 	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/common/util"
@@ -240,7 +238,11 @@ func CreateDeployProposalFromCDS(
 	escc []byte,
 	vscc []byte,
 	collectionConfig []byte) (*peer.Proposal, string, error) {
-	return createProposalFromCDS(chainID, cds, creator, "deploy", policy, escc, vscc, collectionConfig)
+	if collectionConfig == nil {
+		return createProposalFromCDS(chainID, cds, creator, "deploy", policy, escc, vscc)
+	} else {
+		return createProposalFromCDS(chainID, cds, creator, "deploy", policy, escc, vscc, collectionConfig)
+	}
 }
 
 // CreateUpgradeProposalFromCDS returns a upgrade proposal given a serialized identity and a ChaincodeDeploymentSpec

@@ -18,10 +18,10 @@ import (
 	"github.com/hyperledger/fabric-sdk-go/pkg/errors"
 
 	"github.com/hyperledger/fabric-sdk-go/api/apiconfig"
-	protos_utils "github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/protos/utils"
 	"github.com/hyperledger/fabric-sdk-go/pkg/fabric-client/internal/txnproc"
 	"github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/protos/common"
 	pb "github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/protos/peer"
+	protos_utils "github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/protos/utils"
 )
 
 func init() {
@@ -62,24 +62,6 @@ func (c *Channel) CreateTransaction(resps []*apitxn.TransactionProposalResponse)
 	if err != nil {
 		return nil, err
 	}
-
-	// This code is commented out because the ProposalResponsePayload Extension ChaincodeAction Results
-	// return from endorsements is different so the compare will fail
-
-	//            var a1 []byte
-	//            for n, r := range resps {
-	//                            if n == 0 {
-	//                                            a1 = r.Payload
-	//                                            if r.Response.Status != 200 {
-	//                                                            return nil, errors.Errorf("proposal response was not successful, error code %d, msg %s", r.Response.Status, r.Response.Message)
-	//                                            }
-	//                                            continue
-	//                            }
-
-	//                            if bytes.Compare(a1, r.Payload) != 0 {
-	//                                            return nil, errors.New("ProposalResponsePayloads do not match")
-	//                            }
-	//            }
 
 	for _, r := range resps {
 		if r.ProposalResponse.Response.Status != 200 {
