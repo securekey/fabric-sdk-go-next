@@ -50,6 +50,8 @@ git clone https://gerrit.hyperledger.org/r/fabric-sdk-go
 cd fabric-sdk-go
 git checkout d3dc31289b555b5a01d74aad135a0c92d268d374
 
+## logger fix to override deflogger for private-logger changes
+git fetch https://gerrit.hyperledger.org/r/fabric-sdk-go refs/changes/81/16681/1 && git cherry-pick FETCH_HEAD
 
 #export FABRIC_SDK_EXTRA_GO_TAGS=channelevents
 make all
