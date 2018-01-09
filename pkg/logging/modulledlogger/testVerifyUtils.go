@@ -4,7 +4,7 @@ Copyright SecureKey Technologies Inc. All Rights Reserved.
 SPDX-License-Identifier: Apache-2.0
 */
 
-package deflogger
+package modulledlogger
 
 import (
 	"bytes"
@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	basicLevelOutputWithCallerInfoExpectedRegex = "\\[%s\\] .* UTC - deflogger.* -> %4.4s brown fox jumps over the lazy dog"
+	basicLevelOutputWithCallerInfoExpectedRegex = "\\[%s\\] .* UTC - modulledlogger.* -> %4.4s brown fox jumps over the lazy dog"
 	basicLevelOutputExpectedRegex               = "\\[%s\\] .* UTC .*-> %4.4s brown fox jumps over the lazy dog"
 	printLevelOutputExpectedRegex               = "\\[%s\\] .* brown fox jumps over the lazy dog"
 	customLevelOutputExpectedRegex              = "\\[%s\\] .* CUSTOM LOG OUTPUT"
@@ -88,6 +88,8 @@ func VerifyBasicLogging(t *testing.T, level apilogging.Level, loggerFunc fn, log
 		regex = fmt.Sprintf(printLevelOutputExpectedRegex, moduleName)
 	}
 	match, err := regexp.MatchString(regex, buf.String())
+
+	fmt.Println(buf.String())
 
 	utils.VerifyEmpty(t, err, "error while matching regex with logoutput wasnt expected")
 	utils.VerifyTrue(t, match, "%s logger isn't producing output as expected, \n logoutput:%s\n regex: %s", levelName, buf.String(), regex)

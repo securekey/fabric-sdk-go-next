@@ -19,10 +19,10 @@ import (
 	"github.com/hyperledger/fabric-sdk-go/def/fabapi/opt"
 	"github.com/hyperledger/fabric-sdk-go/pkg/errors"
 	"github.com/hyperledger/fabric-sdk-go/pkg/logging"
-	"github.com/hyperledger/fabric-sdk-go/pkg/logging/deflogger"
 
 	chmgmt "github.com/hyperledger/fabric-sdk-go/api/apitxn/chmgmtclient"
 	resmgmt "github.com/hyperledger/fabric-sdk-go/api/apitxn/resmgmtclient"
+	"github.com/hyperledger/fabric-sdk-go/pkg/logging/modulledlogger"
 )
 
 // Options encapsulates configuration for the SDK
@@ -98,7 +98,7 @@ func NewSDK(options Options) (*FabricSDK, error) {
 
 	// Initialize logging provider with default logging provider (if needed)
 	if sdk.LoggerFactory == nil {
-		sdk.LoggerFactory = deflogger.LoggerProvider()
+		sdk.LoggerFactory = modulledlogger.LoggerProvider()
 	}
 	logging.InitLogger(sdk.LoggerFactory)
 
