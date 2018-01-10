@@ -7,10 +7,10 @@
 
 
 export FABRIC_CA_FIXTURE_TAG=1.0.3
-export FABRIC_ORDERER_FIXTURE_TAG=1.1.0-0.0.2-snapshot-75c6339
-export FABRIC_PEER_FIXTURE_TAG=1.1.0-0.0.2-snapshot-75c6339
-export FABRIC_COUCHDB_FIXTURE_TAG=1.1.0-0.0.2-snapshot-75c6339
-export FABRIC_BUILDER_FIXTURE_TAG=1.1.0-0.0.2-snapshot-75c6339
+export FABRIC_ORDERER_FIXTURE_TAG=1.1.0-0.0.3-snapshot-2f6440d
+export FABRIC_PEER_FIXTURE_TAG=1.1.0-0.0.3-snapshot-2f6440d
+export FABRIC_COUCHDB_FIXTURE_TAG=1.1.0-0.0.3-snapshot-2f6440d
+export FABRIC_BUILDER_FIXTURE_TAG=1.1.0-0.0.3-snapshot-2f6440d
 export FABRIC_BASEOS_FIXTURE_TAG=0.4.2
 
 export FABRIC_CA_FIXTURE_IMAGE=hyperledger/fabric-ca
@@ -48,7 +48,7 @@ mkdir -p $GOPATH/src/github.com/hyperledger/fabric-sdk-go
 cd $GOPATH/src/github.com/hyperledger/
 git clone https://gerrit.hyperledger.org/r/fabric-sdk-go
 cd fabric-sdk-go
-git checkout d3dc31289b555b5a01d74aad135a0c92d268d374
+git checkout 188110a6d67e7298950bbdc01769008d2bb0e920
 
 ## logger fix to override deflogger for private-logger changes
 git fetch https://gerrit.hyperledger.org/r/fabric-sdk-go refs/changes/81/16681/1 && git cherry-pick FETCH_HEAD
