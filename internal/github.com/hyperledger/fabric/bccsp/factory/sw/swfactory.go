@@ -22,7 +22,7 @@ package sw
 import (
 	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/bccsp"
 	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/bccsp/sw"
-	"github.com/hyperledger/fabric-sdk-go/pkg/errors"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -59,7 +59,7 @@ func (f *SWFactory) Get(swOpts *SwOpts) (bccsp.BCCSP, error) {
 		ks = sw.NewDummyKeyStore()
 	}
 
-	return sw.New(swOpts.SecLevel, swOpts.HashFamily, ks)
+	return sw.NewWithParams(swOpts.SecLevel, swOpts.HashFamily, ks)
 }
 
 // SwOpts contains options for the SWFactory

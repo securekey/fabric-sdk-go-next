@@ -23,9 +23,10 @@ You're good to go, happy coding! Check out the examples for usage demonstrations
 ### Examples
 
 - [E2E Test](test/integration/e2e/end_to_end.go): Basic example that uses SDK to query and execute transaction
-- [Multi Org Test](test/integration/orgs/multiple_orgs_test.go): An example that has multiple organisations involved in transaction
-- [Dynamic Endorser Selection](test/integration/sdk/sdk_provider_test.go): An example that uses dynamic endorser selection (based on chaincode policy) 
-- [E2E PKCS11 Test](test/integration/pkcs11/e2e_test.go): E2E Test using a PKCS11 crypto suite and configuration
+- [Ledger Query Test](test/integration/pkg/client/ledger/ledger_queries_test.go): Basic example that uses SDK to query a channel's underlying ledger
+- [Multi Org Test](test/integration/e2e/orgs/multiple_orgs_test.go): An example that has multiple organisations involved in transaction
+- [Dynamic Endorser Selection](test/integration/pkg/fabsdk/provider/sdk_provider_test.go): An example that uses dynamic endorser selection (based on chaincode policy)
+- [E2E PKCS11 Test](test/integration/e2e/pkcs11/e2e_test.go): E2E Test using a PKCS11 crypto suite and configuration
 - [CLI](https://github.com/securekey/fabric-examples/tree/master/fabric-cli/): An example CLI for Fabric built with the Go SDK.
 - More examples needed!
 
@@ -39,17 +40,17 @@ You're good to go, happy coding! Check out the examples for usage demonstrations
 
 ### Current Compatibility
 The SDK's integration tests run against three tagged Fabric versions:
-- prev (currently v1.0.0)
-- stable (currently latest of v1.0.x)
-- prerelease (currently latest of v1.1.0-x)
+- prev (currently v1.1.0)
+- stable (currently v1.2.0)
+- prerelease (currently disabled)
 
 Additionally for development purposes integration tests also run against the devstable Fabric version as needed.
 
 ### Retired versions
 When the 'prev' code level is updated, the last tested fabric-sdk-go commit or tag is listed below.
 
-- fabric v1.0.0 & fabric-ca v1.0.0
-  - fabric-sdk-go: master:HEAD
+- fabric v1.0 & fabric-ca v1.0
+  - fabric-sdk-go: 5ac5226
 
 ### Running the test suite
 
@@ -58,7 +59,7 @@ When the 'prev' code level is updated, the last tested fabric-sdk-go commit or t
 cd $GOPATH/src/github.com/hyperledger/fabric-sdk-go/
 
 # Optional - Automatically install Go tools used by test suite
-# make depend-install
+# make depend
 
 # Running test suite
 make
@@ -94,13 +95,13 @@ To contribute patches, you will need to clone (or add a remote) from [Gerrit](ht
 # In the Fabric SDK Go directory
 cd $GOPATH/src/github.com/hyperledger/fabric-sdk-go/
 
-# Ensure dependencies are installed
-make depend
+# Optional - Automatically install Go tools used by test suite
+# make depend
 
-# Running code checks (license, linting, spelling, etc)
-make checks
+# Optional - Running only code checks (linters, license, spelling, etc)
+# make checks
 
-# Running all unit tests
+# Running all unit tests and checks
 make unit-test
 
 # Running all integration tests
@@ -120,11 +121,6 @@ You need:
 
 - A working fabric and fabric-ca set up. It is recommended that you use the docker-compose file provided in `test/fixtures/dockerenv`. It is also recommended that you use the default .env settings provided in `test/fixtures/dockerenv`. See steps below.
 - Customized settings in the `test/fixtures/config/config_test.yaml` in case your Hyperledger Fabric network is not running on `localhost` or is using different ports.
-
-#### Enable local hostnames
-
-You will need to set the following hosts to 127.0.0.1 (typically in /etc/hosts):
-ca.org1.example.com ca.org2.example.com peer0.org1.example.com peer1.org1.example.com peer0.org2.example.com peer1.org2.example.com orderer.example.com
 
 #### Testing with Fabric Images at Docker Hub
 
@@ -151,6 +147,8 @@ Fabric should now be running. In a different shell, run integration tests
 cd $GOPATH/src/github.com/hyperledger/fabric-sdk-go
 
 # Use script to setup parameters for integration tests and execute them
+# Previously we use to have hostnames like Fabric CA server, orderer and peer pointed to localhost
+# Now since we removed this now, We will be using a different configuration
 make integration-tests-local
 
 # Or more generally, run integration tests at a different code level (prev, stable, prerelease, devstable)
@@ -160,27 +158,19 @@ make integration-tests-local
 
 
 ```bash
+# Previously we use to have hostnames like Fabric CA server, orderer and peer pointed to localhost
+# Now since we removed this now, We will be using a different config file config_test_local.yaml
+# which has the Fabric CA server, orderer and peers pointed to localhost
 # It is also possible to run integration tests using go test directly. For example:
 #cd $GOPATH/src/github.com/hyperledger/fabric-sdk-go/test/integration/
-#go test
+#go -args testLocal=true test
 
 #cd $GOPATH/src/github.com/hyperledger/fabric-sdk-go/test/integration/orgs
-#go test
+#go -args testLocal=true test
 
 # You should review test/scripts/integration.sh for options and details.
 # Note: you should generally prefer the scripted version to setup parameters for you.
 ```
-
-#### Using default config
-
-Default SDK Go configurations are found in the code under /pkg/config/config.yaml
-
-To override the default in non Dev environment, set the default path in the following environment variable:
-
-**FABRIC_SDK_CONFIG_PATH**=/path/to/default/config yaml(without specifying the yaml file name)
-
-This path value must be a directory. It must contain a default 'config.yaml' file.
-Note that this default config is used only if environment configuration yaml file is missing to ensure all environment variables are created regardless of their values.
 
 #### Testing with Local Build of Fabric (Advanced)
 

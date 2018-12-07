@@ -51,7 +51,6 @@ mkdir -p "${THIRDPARTY_FABRIC_PATH}/protos"
 echo "Pinning and patching fabric client utils..."
 declare -a CLIENT_UTILS_IMPORT_SUBSTS=(
     's/[[:space:]]logging[[:space:]]\"github.com/\"github.com/g'
-    's/\"github.com\/pkg\/errors/\"github.com\/hyperledger\/fabric-sdk-go\/pkg\/errors/g'
     's/\"github.com\/hyperledger\/fabric\/common\/flogging/flogging\"github.com\/hyperledger\/fabric-sdk-go\/internal\/github.com\/hyperledger\/fabric\/sdkpatch\/logbridge/g'
     's/\"github.com\/op\/go-logging/logging\"github.com\/hyperledger\/fabric-sdk-go\/internal\/github.com\/hyperledger\/fabric\/sdkpatch\/logbridge/g'
     's/\"github.com\/hyperledger\/fabric\/bccsp/\"github.com\/hyperledger\/fabric-sdk-go\/internal\/github.com\/hyperledger\/fabric\/bccsp/g'
@@ -62,6 +61,8 @@ declare -a CLIENT_UTILS_IMPORT_SUBSTS=(
     's/\"github.com\/hyperledger\/fabric\/protos\/orderer/\"github.com\/hyperledger\/fabric-sdk-go\/third_party\/github.com\/hyperledger\/fabric\/protos\/orderer/g'
     's/\"github.com\/hyperledger\/fabric\/protos\/ledger/\"github.com\/hyperledger\/fabric-sdk-go\/third_party\/github.com\/hyperledger\/fabric\/protos\/ledger/g'
     's/\"github.com\/hyperledger\/fabric\/protos\/utils/\"github.com\/hyperledger\/fabric-sdk-go\/third_party\/github.com\/hyperledger\/fabric\/protos\/utils/g'
+    's/\"github.com\/hyperledger\/fabric\/protos\/discovery/\"github.com\/hyperledger\/fabric-sdk-go\/internal\/github.com\/hyperledger\/fabric\/protos\/discovery/g'
+    's/\"github.com\/hyperledger\/fabric\/protos\/gossip/\"github.com\/hyperledger\/fabric-sdk-go\/internal\/github.com\/hyperledger\/fabric\/protos\/gossip/g'
     's/\"github.com\/hyperledger\/fabric\/protos/\"github.com\/hyperledger\/fabric-sdk-go\/internal\/github.com\/hyperledger\/fabric\/protos/g'
     's/\"github.com\/hyperledger\/fabric\//\"github.com\/hyperledger\/fabric-sdk-go\/internal\/github.com\/hyperledger\/fabric\//g'
 )
@@ -71,7 +72,6 @@ eval "INTERNAL_PATH=$THIRDPARTY_INTERNAL_FABRIC_PATH TMP_PROJECT_PATH=$TMP_PROJE
 # external utils
 echo "Pinning and patching fabric external utils ..."
 declare -a EXTERNAL_UTILS_IMPORT_SUBSTS=(
-    's/\"github.com\/pkg\/errors/\"github.com\/hyperledger\/fabric-sdk-go\/pkg\/errors/g'
     's/\"github.com\/hyperledger\/fabric\/common\/flogging/flogging\"github.com\/hyperledger\/fabric-sdk-go\/internal\/github.com\/hyperledger\/fabric\/sdkpatch\/logbridge/g'
     's/\"github.com\/hyperledger\/fabric\/common\/cauthdsl/\"github.com\/hyperledger\/fabric-sdk-go\/third_party\/github.com\/hyperledger\/fabric\/common\/cauthdsl/g'
     's/\"github.com\/hyperledger\/fabric\/protos\/common/\"github.com\/hyperledger\/fabric-sdk-go\/third_party\/github.com\/hyperledger\/fabric\/protos\/common/g'
@@ -86,7 +86,6 @@ eval "INTERNAL_PATH=$THIRDPARTY_FABRIC_PATH TMP_PROJECT_PATH=$TMP_PROJECT_PATH I
 # protos
 echo "Pinning and patching protos (third party) ..."
 declare -a PROTOS_IMPORT_SUBSTS=(
-    's/\"github.com\/pkg\/errors/\"github.com\/hyperledger\/fabric-sdk-go\/pkg\/errors/g'
     's/\"github.com\/hyperledger\/fabric\/common\/flogging/flogging\"github.com\/hyperledger\/fabric-sdk-go\/internal\/github.com\/hyperledger\/fabric\/sdkpatch\/logbridge/g'
     's/\"github.com\/hyperledger\/fabric\/bccsp/\"github.com\/hyperledger\/fabric-sdk-go\/internal\/github.com\/hyperledger\/fabric\/bccsp/g'
     's/\"github.com\/hyperledger\/fabric\/common\/cauthdsl/\"github.com\/hyperledger\/fabric-sdk-go\/third_party\/github.com\/hyperledger\/fabric\/common\/cauthdsl/g'
@@ -101,13 +100,13 @@ eval "INTERNAL_PATH=$THIRDPARTY_FABRIC_API_PATH TMP_PROJECT_PATH=$TMP_PROJECT_PA
 # proto utils
 echo "Pinning and patching protos (internal) ..."
 declare -a PROTOS_INTERNAL_IMPORT_SUBSTS=(
-    's/\"github.com\/pkg\/errors/\"github.com\/hyperledger\/fabric-sdk-go\/pkg\/errors/g'
     's/\"github.com\/hyperledger\/fabric\/common\/flogging/factory\"github.com\/hyperledger\/fabric-sdk-go\/internal\/github.com\/hyperledger\/fabric\/sdkpatch\/logbridge/g'
     's/\"github.com\/hyperledger\/fabric\/bccsp/\"github.com\/hyperledger\/fabric-sdk-go\/internal\/github.com\/hyperledger\/fabric\/bccsp/g'
     's/\"github.com\/hyperledger\/fabric\/common\/cauthdsl/\"github.com\/hyperledger\/fabric-sdk-go\/third_party\/github.com\/hyperledger\/fabric\/common\/cauthdsl/g'
     's/\"github.com\/hyperledger\/fabric\/protos\/common/\"github.com\/hyperledger\/fabric-sdk-go\/third_party\/github.com\/hyperledger\/fabric\/protos\/common/g'
     's/\"github.com\/hyperledger\/fabric\/protos\/peer/\"github.com\/hyperledger\/fabric-sdk-go\/third_party\/github.com\/hyperledger\/fabric\/protos\/peer/g'
     's/\"github.com\/hyperledger\/fabric\/protos\/msp/\"github.com\/hyperledger\/fabric-sdk-go\/third_party\/github.com\/hyperledger\/fabric\/protos\/msp/g'
+    '/package[[:space:]]orderer/s/\"github.com\/hyperledger\/fabric\/protos\/orderer/\"github.com\/hyperledger\/fabric-sdk-go\/internal\/github.com\/hyperledger\/fabric\/protos\/orderer/'
     's/\"github.com\/hyperledger\/fabric\/protos\/orderer/\"github.com\/hyperledger\/fabric-sdk-go\/third_party\/github.com\/hyperledger\/fabric\/protos\/orderer/g'
     's/\"github.com\/hyperledger\/fabric\/protos\/ledger/\"github.com\/hyperledger\/fabric-sdk-go\/third_party\/github.com\/hyperledger\/fabric\/protos\/ledger/g'
     's/\"github.com\/hyperledger\/fabric\/protos\/utils/\"github.com\/hyperledger\/fabric-sdk-go\/third_party\/github.com\/hyperledger\/fabric\/protos\/utils/g'

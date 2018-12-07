@@ -19,8 +19,8 @@ import (
 
 	"github.com/golang/protobuf/proto"
 	bccsp "github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/sdkpatch/cryptosuitebridge"
-	errors "github.com/hyperledger/fabric-sdk-go/pkg/errors"
 	m "github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/protos/msp"
+	errors "github.com/pkg/errors"
 )
 
 func (msp *bccspmsp) getCertifiersIdentifier(certRaw []byte) ([]byte, error) {
@@ -232,14 +232,14 @@ func (msp *bccspmsp) finalizeSetupCAs(config *m.FabricMSPConfig) error {
 }
 
 func (msp *bccspmsp) setupNodeOUs(config *m.FabricMSPConfig) error {
-	if config.FabricNodeOUs != nil {
+	if config.FabricNodeOus != nil {
 
-		msp.ouEnforcement = config.FabricNodeOUs.Enable
+		msp.ouEnforcement = config.FabricNodeOus.Enable
 
 		// ClientOU
-		msp.clientOU = &OUIdentifier{OrganizationalUnitIdentifier: config.FabricNodeOUs.ClientOUIdentifier.OrganizationalUnitIdentifier}
-		if len(config.FabricNodeOUs.ClientOUIdentifier.Certificate) != 0 {
-			certifiersIdentifier, err := msp.getCertifiersIdentifier(config.FabricNodeOUs.ClientOUIdentifier.Certificate)
+		msp.clientOU = &OUIdentifier{OrganizationalUnitIdentifier: config.FabricNodeOus.ClientOuIdentifier.OrganizationalUnitIdentifier}
+		if len(config.FabricNodeOus.ClientOuIdentifier.Certificate) != 0 {
+			certifiersIdentifier, err := msp.getCertifiersIdentifier(config.FabricNodeOus.ClientOuIdentifier.Certificate)
 			if err != nil {
 				return err
 			}
@@ -247,24 +247,15 @@ func (msp *bccspmsp) setupNodeOUs(config *m.FabricMSPConfig) error {
 		}
 
 		// PeerOU
-		msp.peerOU = &OUIdentifier{OrganizationalUnitIdentifier: config.FabricNodeOUs.PeerOUIdentifier.OrganizationalUnitIdentifier}
-		if len(config.FabricNodeOUs.PeerOUIdentifier.Certificate) != 0 {
-			certifiersIdentifier, err := msp.getCertifiersIdentifier(config.FabricNodeOUs.PeerOUIdentifier.Certificate)
+		msp.peerOU = &OUIdentifier{OrganizationalUnitIdentifier: config.FabricNodeOus.PeerOuIdentifier.OrganizationalUnitIdentifier}
+		if len(config.FabricNodeOus.PeerOuIdentifier.Certificate) != 0 {
+			certifiersIdentifier, err := msp.getCertifiersIdentifier(config.FabricNodeOus.PeerOuIdentifier.Certificate)
 			if err != nil {
 				return err
 			}
 			msp.peerOU.CertifiersIdentifier = certifiersIdentifier
 		}
 
-		// OrdererOU
-		msp.ordererOU = &OUIdentifier{OrganizationalUnitIdentifier: config.FabricNodeOUs.OrdererOUIdentifier.OrganizationalUnitIdentifier}
-		if len(config.FabricNodeOUs.OrdererOUIdentifier.Certificate) != 0 {
-			certifiersIdentifier, err := msp.getCertifiersIdentifier(config.FabricNodeOUs.OrdererOUIdentifier.Certificate)
-			if err != nil {
-				return err
-			}
-			msp.ordererOU.CertifiersIdentifier = certifiersIdentifier
-		}
 	} else {
 		msp.ouEnforcement = false
 	}

@@ -14,7 +14,7 @@ set -e
 IMPORT_SUBSTS=($IMPORT_SUBSTS)
 
 GOIMPORTS_CMD=goimports
-GOFILTER_CMD="go run scripts/_go/cmd/gofilter/gofilter.go"
+GOFILTER_CMD="go run scripts/_go/src/gofilter/cmd/gofilter/gofilter.go"
 
 declare -a PKGS=(
         "common/cauthdsl"
@@ -63,10 +63,9 @@ gofilter
 
 FILTER_FILENAME="protos/utils/proputils.go"
 FILTER_FN="GetHeader,GetChaincodeProposalPayload,GetSignatureHeader,GetChaincodeHeaderExtension,GetBytesChaincodeActionPayload"
-FILTER_FN+=",GetBytesTransaction,GetBytesPayload,GetHeader,GetBytesProposalResponsePayload,GetBytesProposal,CreateChaincodeProposal"
-FILTER_FN+=",GetBytesChaincodeProposalPayload,CreateChaincodeProposalWithTransient,ComputeProposalTxID"
-FILTER_FN+=",CreateChaincodeProposalWithTxIDNonceAndTransient,CreateDeployProposalFromCDS,CreateUpgradeProposalFromCDS"
-FILTER_FN+=",createProposalFromCDS,CreateProposalFromCIS,CreateInstallProposalFromCDS,GetTransaction,GetPayload"
+FILTER_FN+=",GetBytesTransaction,GetBytesPayload,GetHeader,GetBytesProposalResponsePayload,GetBytesProposal"
+FILTER_FN+=",CreateChaincodeProposalWithTxIDNonceAndTransient"
+FILTER_FN+=",GetTransaction,GetPayload,GetBytesChaincodeProposalPayload"
 FILTER_FN+=",GetChaincodeActionPayload,GetProposalResponsePayload,GetChaincodeAction,GetChaincodeEvents,GetBytesChaincodeEvent,GetBytesEnvelope"
 gofilter
 sed -i'' -e 's/"github.com\/hyperledger\/fabric\/bccsp\/factory"/factory "github.com\/hyperledger\/fabric-sdk-go\/internal\/github.com\/hyperledger\/fabric\/sdkpatch\/cryptosuitebridge"/g' "${TMP_PROJECT_PATH}/${FILTER_FILENAME}"
@@ -92,7 +91,7 @@ FILTER_FN+=",collHashedRwSetFromProtoMsg,collPvtRwSetFromProtoMsg"
 gofilter
 
 FILTER_FILENAME="core/ledger/util/txvalidationflags.go"
-FILTER_FN="IsValid,IsInvalid,Flag,IsSetTo,NewTxValidationFlags"
+FILTER_FN="IsValid,IsInvalid,Flag,IsSetTo,NewTxValidationFlags,newTxValidationFlagsSetValue"
 gofilter
 
 # Apply patching

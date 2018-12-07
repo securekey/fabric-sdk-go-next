@@ -11,13 +11,12 @@ Please review third_party pinning scripts and patches for more details.
 package logbridge
 
 import (
-	"github.com/hyperledger/fabric-sdk-go/api/apilogging"
-	"github.com/hyperledger/fabric-sdk-go/pkg/logging"
+	"github.com/hyperledger/fabric-sdk-go/pkg/common/logging"
 )
 
 // Log levels (from fabric-sdk-go/pkg/logging/level.go).
 const (
-	CRITICAL apilogging.Level = iota
+	CRITICAL logging.Level = iota
 	ERROR
 	WARNING
 	INFO
@@ -32,7 +31,7 @@ type Logger struct {
 
 // MustGetLogger bridges calls the Go SDK NewLogger
 func MustGetLogger(module string) *Logger {
-	fabModule := "fabric_sdk_go"
+	fabModule := "fabsdk/fab"
 	logger := logging.NewLogger(fabModule)
 	return &Logger{
 		Logger: logger,
@@ -51,6 +50,6 @@ func (l *Logger) Warning(args ...interface{}) {
 }
 
 // IsEnabledFor bridges calls to the Go SDK logger's IsEnabledFor.
-func (l *Logger) IsEnabledFor(level apilogging.Level) bool {
+func (l *Logger) IsEnabledFor(level logging.Level) bool {
 	return logging.IsEnabledFor(l.module, level)
 }

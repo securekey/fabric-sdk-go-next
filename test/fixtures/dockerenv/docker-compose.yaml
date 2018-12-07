@@ -7,15 +7,19 @@ version: '2'
 
 services:
   org1ca1:
-    image: ${FABRIC_DOCKER_REGISTRY}${FABRIC_CA_FIXTURE_IMAGE}:${ARCH}${ARCH_SEP}${FABRIC_CA_FIXTURE_TAG}
+    image: ${FABRIC_DOCKER_REGISTRY}${FABRIC_CA_FIXTURE_IMAGE}:${FABRIC_ARCH}${FABRIC_ARCH_SEP}${FABRIC_CA_FIXTURE_TAG}
     environment:
       - FABRIC_CA_HOME=/etc/hyperledger/fabric-ca-server
       - FABRIC_CA_SERVER_CA_NAME=ca.org1.example.com
       - FABRIC_CA_SERVER_CA_CERTFILE=/etc/hyperledger/fabric-ca-server-config/ca.org1.example.com-cert.pem
-      - FABRIC_CA_SERVER_CA_KEYFILE=/etc/hyperledger/fabric-ca-server-config/8791d1363e89515f9afa042b0693a2c704bb8dd95d28f97d3549a2b9e3c4352d_sk
+      - FABRIC_CA_SERVER_CA_KEYFILE=${ORG1CA1_FABRIC_CA_SERVER_CA_KEYFILE}
       - FABRIC_CA_SERVER_TLS_ENABLED=true
-      - FABRIC_CA_SERVER_TLS_CERTFILE=/etc/hyperledger/fabric-ca-server-config/tls/server_wild_org1or2.example.com.pem
-      - FABRIC_CA_SERVER_TLS_KEYFILE=/etc/hyperledger/fabric-ca-server-config/tls/server_wild_org1or2.example.com-key.pem
+      - FABRIC_CA_SERVER_TLS_CERTFILE=/etc/hyperledger/tls/peer/server.crt
+      - FABRIC_CA_SERVER_TLS_KEYFILE=/etc/hyperledger/tls/peer/server.key
+      - FABRIC_CA_SERVER_TLS_CLIENTAUTH_TYPE
+      - FABRIC_CA_SERVER_TLS_CERTFILES
+      - FABRIC_CA_SERVER_CFG_AFFILIATIONS_ALLOWREMOVE=true
+      - FABRIC_CA_SERVER_CFG_IDENTITIES_ALLOWREMOVE=true
     #comment out logging.driver in order to render the debug logs
     logging:
       driver: none
@@ -24,22 +28,27 @@ services:
     command: sh -c 'fabric-ca-server start -b admin:adminpw -d'
     volumes:
       - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/peerOrganizations/org1.example.com/ca/:/etc/hyperledger/fabric-ca-server-config/
-      - ../fabricca/tls/certs/server/:/etc/hyperledger/fabric-ca-server-config/tls
+      - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/peerOrganizations/org1.example.com/peers/ca.org1.example.com/tls:/etc/hyperledger/tls/peer
+      - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/peerOrganizations/tls.example.com/tlsca:/etc/hyperledger/tlsca
     networks:
       default:
         aliases:
           - ca.org1.example.com
 
   org2ca1:
-    image: ${FABRIC_DOCKER_REGISTRY}${FABRIC_CA_FIXTURE_IMAGE}:${ARCH}${ARCH_SEP}${FABRIC_CA_FIXTURE_TAG}
+    image: ${FABRIC_DOCKER_REGISTRY}${FABRIC_CA_FIXTURE_IMAGE}:${FABRIC_ARCH}${FABRIC_ARCH_SEP}${FABRIC_CA_FIXTURE_TAG}
     environment:
       - FABRIC_CA_HOME=/etc/hyperledger/fabric-ca-server
       - FABRIC_CA_SERVER_CA_NAME=ca.org2.example.com
       - FABRIC_CA_SERVER_CA_CERTFILE=/etc/hyperledger/fabric-ca-server-config/ca.org2.example.com-cert.pem
-      - FABRIC_CA_SERVER_CA_KEYFILE=/etc/hyperledger/fabric-ca-server-config/a259204dbd6adb14c05a6e02de94567b2a9f7dbe9e6a063ba767d42bf0b544c1_sk
+      - FABRIC_CA_SERVER_CA_KEYFILE=${ORG2CA1_FABRIC_CA_SERVER_CA_KEYFILE}
       - FABRIC_CA_SERVER_TLS_ENABLED=true
-      - FABRIC_CA_SERVER_TLS_CERTFILE=/etc/hyperledger/fabric-ca-server-config/tls/server_wild_org1or2.example.com.pem
-      - FABRIC_CA_SERVER_TLS_KEYFILE=/etc/hyperledger/fabric-ca-server-config/tls/server_wild_org1or2.example.com-key.pem
+      - FABRIC_CA_SERVER_TLS_CERTFILE=/etc/hyperledger/tls/peer/server.crt
+      - FABRIC_CA_SERVER_TLS_KEYFILE=/etc/hyperledger/tls/peer/server.key
+      - FABRIC_CA_SERVER_TLS_CLIENTAUTH_TYPE
+      - FABRIC_CA_SERVER_TLS_CERTFILES
+      - FABRIC_CA_SERVER_CFG_AFFILIATIONS_ALLOWREMOVE=true
+      - FABRIC_CA_SERVER_CFG_IDENTITIES_ALLOWREMOVE=true
     #comment out logging.driver in order to render the debug logs
     logging:
       driver: none
@@ -48,16 +57,17 @@ services:
     command: sh -c 'fabric-ca-server start -b admin:adminpw -d -p 8054'
     volumes:
       - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/peerOrganizations/org2.example.com/ca/:/etc/hyperledger/fabric-ca-server-config/
-      - ../fabricca/tls/certs/server:/etc/hyperledger/fabric-ca-server-config/tls
+      - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/peerOrganizations/org2.example.com/peers/ca.org2.example.com/tls:/etc/hyperledger/tls/peer
+      - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/peerOrganizations/tls.example.com/tlsca:/etc/hyperledger/tlsca
     networks:
       default:
         aliases:
           - ca.org2.example.com
 
   orderer1:
-    image: ${FABRIC_DOCKER_REGISTRY}${FABRIC_ORDERER_FIXTURE_IMAGE}:${ARCH}${ARCH_SEP}${FABRIC_ORDERER_FIXTURE_TAG}
+    image: ${FABRIC_DOCKER_REGISTRY}${FABRIC_ORDERER_FIXTURE_IMAGE}:${FABRIC_ARCH}${FABRIC_ARCH_SEP}${FABRIC_ORDERER_FIXTURE_TAG}
     environment:
-      - ORDERER_GENERAL_LOGLEVEL=debug
+      - ORDERER_GENERAL_LOGLEVEL=info
       - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
       - ORDERER_GENERAL_GENESISMETHOD=file
       - ORDERER_GENERAL_GENESISFILE=/etc/hyperledger/configtx/twoorgs.genesis.block
@@ -69,7 +79,7 @@ services:
       - ORDERER_GENERAL_TLS_ROOTCAS=[/etc/hyperledger/tls/orderer/ca.crt]
       - ORDERER_GENERAL_TLS_CLIENTAUTHENABLED
       - ORDERER_GENERAL_TLS_CLIENTROOTCAS
-    #comment out logging.driver in order to render the debug logs  
+    #comment out logging.driver in order to render the debug logs
     logging:
       driver: none
     working_dir: /opt/gopath/src/github.com/hyperledger/fabric/orderer
@@ -77,39 +87,37 @@ services:
     ports:
       - 7050:7050
     volumes:
-        - ../fabric/${FABRIC_FIXTURE_VERSION}/channel:/etc/hyperledger/configtx
-        - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/msp:/etc/hyperledger/msp/orderer
-        - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/tls:/etc/hyperledger/tls/orderer
-        - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/mutual_tls:/etc/hyperledger/mutual_tls/orderer
+      - ../fabric/${FABRIC_FIXTURE_VERSION}/channel:/etc/hyperledger/configtx
+      - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/msp:/etc/hyperledger/msp/orderer
+      - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/tls:/etc/hyperledger/tls/orderer
+      - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/peerOrganizations/tls.example.com/tlsca:/etc/hyperledger/tlsca
     networks:
       default:
         aliases:
           - orderer.example.com
 
   org1peer1:
-    image: ${FABRIC_DOCKER_REGISTRY}${FABRIC_PEER_FIXTURE_IMAGE}:${ARCH}${ARCH_SEP}${FABRIC_PEER_FIXTURE_TAG}
+    image: ${FABRIC_DOCKER_REGISTRY}${FABRIC_PEER_FIXTURE_IMAGE}:${FABRIC_ARCH}${FABRIC_ARCH_SEP}${FABRIC_PEER_FIXTURE_TAG}
     environment:
-      - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
+      - CORE_VM_ENDPOINT
       - CORE_PEER_ID=peer0.org1.example.com
-      - CORE_LOGGING_PEER=debug
+      - CORE_LOGGING_PEER=info
       # - CORE_LOGGING_GRPC=debug
       # - CORE_LOGGING_GOSSIP=debug
       # - CORE_CHAINCODE_STARTUPTIMEOUT=30s
       - CORE_CHAINCODE_LOGGING_SHIM=debug
       - CORE_CHAINCODE_LOGGING_LEVEL=debug
-      - CORE_CHAINCODE_BUILDER=${FABRIC_DOCKER_REGISTRY}${FABRIC_BUILDER_FIXTURE_IMAGE}:${ARCH}${ARCH_SEP}${FABRIC_BUILDER_FIXTURE_TAG}
-      - CORE_CHAINCODE_GOLANG_RUNTIME=${FABRIC_DOCKER_REGISTRY}${FABRIC_BASEOS_FIXTURE_IMAGE}:${BASE_ARCH}-${FABRIC_BASEOS_FIXTURE_TAG}
-      ## the following setting redirects chaincode container logs to the peer container logs
-      - CORE_VM_DOCKER_ATTACHSTDOUT=true
+      - CORE_CHAINCODE_BUILDER=${FABRIC_DOCKER_REGISTRY}${FABRIC_BUILDER_FIXTURE_IMAGE}:${FABRIC_ARCH}${FABRIC_ARCH_SEP}${FABRIC_BUILDER_FIXTURE_TAG}
+      - CORE_CHAINCODE_GOLANG_RUNTIME=${FABRIC_BASE_DOCKER_REGISTRY}${FABRIC_BASEOS_FIXTURE_IMAGE}:${FABRIC_ARCH}${FABRIC_ARCH_SEP}${FABRIC_BASEOS_FIXTURE_TAG}
+      - CORE_CHAINCODE_EXECUTETIMEOUT=120s
+      - CORE_VM_DOCKER_ATTACHSTDOUT=false
       - CORE_PEER_LOCALMSPID=Org1MSP
-      - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/msp/peer/
+      - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/msp/peer
       - CORE_PEER_LISTENADDRESS=0.0.0.0:7051
-      - CORE_PEER_ADDRESS=0.0.0.0:7051
-      - CORE_PEER_CHAINCODELISTENADDRESS=peer0.org1.example.com:7052
-      - CORE_PEER_ADDRESSAUTODETECT=true
+      - CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:7052
       - CORE_PEER_GOSSIP_BOOTSTRAP=127.0.0.1:7051
+      - CORE_PEER_ADDRESS=peer0.org1.example.com:7051
       - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer0.org1.example.com:7051
-      - CORE_PEER_EVENTS_ADDRESS=0.0.0.0:7053
       - CORE_PEER_TLS_ENABLED=true
       - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/tls/peer/server.key
       - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/tls/peer/server.crt
@@ -120,24 +128,22 @@ services:
       # # bridge network as the peers
       # # https://docs.docker.com/compose/networking/
       - CORE_PEER_NETWORKID=${CORE_PEER_NETWORKID}
-      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=${CORE_PEER_NETWORKID}_default      
-    #comment out logging.driver in order to render the debug logs 
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=${CORE_PEER_NETWORKID}_default
+    #comment out logging.driver in order to render the debug logs
     logging:
-      driver: none 
+      driver: none
     working_dir: /opt/gopath/src/github.com/hyperledger/fabric
     command: peer node start
     ports:
       - "7051:7051"
-      - "7053:7053"
     expose:
       - "7051"
       - "7052"
-      - "7053"
     volumes:
-        - /var/run/:/host/var/run/
-        - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/msp:/etc/hyperledger/msp/peer
-        - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls:/etc/hyperledger/tls/peer
-        - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/mutual_tls:/etc/hyperledger/mutual_tls/peer
+      - /var/run/:/host/var/run/
+      - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/msp:/etc/hyperledger/msp/peer
+      - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls:/etc/hyperledger/tls/peer
+      - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/peerOrganizations/tls.example.com/tlsca:/etc/hyperledger/orgs/tls.example.com/tlsca
     networks:
       default:
         aliases:
@@ -146,31 +152,30 @@ services:
       - orderer1
       - builder
       - golangruntime
+      - chaincoded
 
-  org2peer1:
-    image: ${FABRIC_DOCKER_REGISTRY}${FABRIC_PEER_FIXTURE_IMAGE}:${ARCH}${ARCH_SEP}${FABRIC_PEER_FIXTURE_TAG}
+  org1peer2:
+    image: ${FABRIC_DOCKER_REGISTRY}${FABRIC_PEER_FIXTURE_IMAGE}:${FABRIC_ARCH}${FABRIC_ARCH_SEP}${FABRIC_PEER_FIXTURE_TAG}
     environment:
-      - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
-      - CORE_PEER_ID=peer0.org2.example.com
-      - CORE_LOGGING_PEER=debug
+      - CORE_VM_ENDPOINT
+      - CORE_PEER_ID=peer1.org1.example.com
+      - CORE_LOGGING_PEER=info
       # - CORE_LOGGING_GRPC=debug
       # - CORE_LOGGING_GOSSIP=debug
       # - CORE_CHAINCODE_STARTUPTIMEOUT=30s
       - CORE_CHAINCODE_LOGGING_SHIM=debug
       - CORE_CHAINCODE_LOGGING_LEVEL=debug
-      - CORE_CHAINCODE_BUILDER=${FABRIC_DOCKER_REGISTRY}${FABRIC_BUILDER_FIXTURE_IMAGE}:${ARCH}${ARCH_SEP}${FABRIC_BUILDER_FIXTURE_TAG}
-      - CORE_CHAINCODE_GOLANG_RUNTIME=${FABRIC_DOCKER_REGISTRY}${FABRIC_BASEOS_FIXTURE_IMAGE}:${BASE_ARCH}-${FABRIC_BASEOS_FIXTURE_TAG}
-      ## the following setting redirects chaincode container logs to the peer container logs
-      - CORE_VM_DOCKER_ATTACHSTDOUT=true
-      - CORE_PEER_LOCALMSPID=Org2MSP
-      - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/msp/peer/
-      - CORE_PEER_LISTENADDRESS=0.0.0.0:8051
-      - CORE_PEER_ADDRESS=0.0.0.0:8051
-      - CORE_PEER_CHAINCODELISTENADDRESS=peer0.org2.example.com:7052
-      - CORE_PEER_ADDRESSAUTODETECT=true
-      - CORE_PEER_GOSSIP_BOOTSTRAP=127.0.0.1:8051
-      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer0.org2.example.com:8051
-      - CORE_PEER_EVENTS_ADDRESS=0.0.0.0:8053
+      - CORE_CHAINCODE_BUILDER=${FABRIC_DOCKER_REGISTRY}${FABRIC_BUILDER_FIXTURE_IMAGE}:${FABRIC_ARCH}${FABRIC_ARCH_SEP}${FABRIC_BUILDER_FIXTURE_TAG}
+      - CORE_CHAINCODE_GOLANG_RUNTIME=${FABRIC_BASE_DOCKER_REGISTRY}${FABRIC_BASEOS_FIXTURE_IMAGE}:${FABRIC_ARCH}${FABRIC_ARCH_SEP}${FABRIC_BASEOS_FIXTURE_TAG}
+      - CORE_CHAINCODE_EXECUTETIMEOUT=120s
+      - CORE_VM_DOCKER_ATTACHSTDOUT=false
+      - CORE_PEER_LOCALMSPID=Org1MSP
+      - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/msp/peer
+      - CORE_PEER_LISTENADDRESS=0.0.0.0:7151
+      - CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:7152
+      - CORE_PEER_ADDRESS=peer1.org1.example.com:7151
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer1.org1.example.com:7151
+      - CORE_PEER_GOSSIP_BOOTSTRAP=peer0.org1.example.com:7051
       - CORE_PEER_TLS_ENABLED=true
       - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/tls/peer/server.key
       - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/tls/peer/server.crt
@@ -181,24 +186,82 @@ services:
       # # bridge network as the peers
       # # https://docs.docker.com/compose/networking/
       - CORE_PEER_NETWORKID=${CORE_PEER_NETWORKID}
-      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=${CORE_PEER_NETWORKID}_default     
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=${CORE_PEER_NETWORKID}_default
     #comment out logging.driver in order to render the debug logs
     logging:
-      driver: none  
+      driver: none
+    working_dir: /opt/gopath/src/github.com/hyperledger/fabric
+    command: peer node start
+    ports:
+      - "7151:7151"
+    expose:
+      - "7151"
+      - "7152"
+    volumes:
+      - /var/run/:/host/var/run/
+      - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/peerOrganizations/org1.example.com/peers/peer1.org1.example.com/msp:/etc/hyperledger/msp/peer
+      - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/peerOrganizations/org1.example.com/peers/peer1.org1.example.com/tls:/etc/hyperledger/tls/peer
+      - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/peerOrganizations/tls.example.com/tlsca:/etc/hyperledger/orgs/tls.example.com/tlsca
+    networks:
+      default:
+        aliases:
+          - peer1.org1.example.com
+    depends_on:
+      - orderer1
+      - builder
+      - golangruntime
+      - chaincoded
+
+  org2peer1:
+    image: ${FABRIC_DOCKER_REGISTRY}${FABRIC_PEER_FIXTURE_IMAGE}:${FABRIC_ARCH}${FABRIC_ARCH_SEP}${FABRIC_PEER_FIXTURE_TAG}
+    environment:
+      - CORE_VM_ENDPOINT
+      - CORE_PEER_ID=peer0.org2.example.com
+      - CORE_LOGGING_PEER=info
+      #- CORE_LOGGING_MSP=debug
+      #- CORE_LOGGING_GRPC=debug
+      # - CORE_LOGGING_GOSSIP=debug
+      # - CORE_CHAINCODE_STARTUPTIMEOUT=30s
+      - CORE_CHAINCODE_LOGGING_SHIM=debug
+      - CORE_CHAINCODE_LOGGING_LEVEL=debug
+      - CORE_CHAINCODE_BUILDER=${FABRIC_DOCKER_REGISTRY}${FABRIC_BUILDER_FIXTURE_IMAGE}:${FABRIC_ARCH}${FABRIC_ARCH_SEP}${FABRIC_BUILDER_FIXTURE_TAG}
+      - CORE_CHAINCODE_GOLANG_RUNTIME=${FABRIC_BASE_DOCKER_REGISTRY}${FABRIC_BASEOS_FIXTURE_IMAGE}:${FABRIC_ARCH}${FABRIC_ARCH_SEP}${FABRIC_BASEOS_FIXTURE_TAG}
+      - CORE_CHAINCODE_EXECUTETIMEOUT=120s
+      - CORE_VM_DOCKER_ATTACHSTDOUT=false
+      - CORE_PEER_LOCALMSPID=Org2MSP
+      - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/msp/peer
+      - CORE_PEER_LISTENADDRESS=0.0.0.0:8051
+      - CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:8052
+      - CORE_PEER_ADDRESS=peer0.org2.example.com:8051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer0.org2.example.com:8051
+      - CORE_PEER_GOSSIP_BOOTSTRAP=127.0.0.1:8051
+      #- CORE_PEER_GOSSIP_BOOTSTRAP=peer1.org2.example.com:9051
+      - CORE_PEER_TLS_ENABLED=true
+      - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/tls/peer/server.key
+      - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/tls/peer/server.crt
+      - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/tls/peer/ca.crt
+      - CORE_PEER_TLS_CLIENTAUTHREQUIRED
+      - CORE_PEER_TLS_CLIENTROOTCAS_FILES
+      # # the following setting starts chaincode containers on the same
+      # # bridge network as the peers
+      # # https://docs.docker.com/compose/networking/
+      - CORE_PEER_NETWORKID=${CORE_PEER_NETWORKID}
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=${CORE_PEER_NETWORKID}_default
+    #comment out logging.driver in order to render the debug logs
+    logging:
+      driver: none
     working_dir: /opt/gopath/src/github.com/hyperledger/fabric
     command: peer node start
     ports:
       - "8051:8051"
-      - "8053:8053"
     expose:
       - "8051"
-      - "7052"
-      - "8053"
+      - "8052"
     volumes:
-        - /var/run/:/host/var/run/
-        - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/msp:/etc/hyperledger/msp/peer
-        - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls:/etc/hyperledger/tls/peer
-        - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/mutual_tls:/etc/hyperledger/mutual_tls/peer
+      - /var/run/:/host/var/run/
+      - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/msp:/etc/hyperledger/msp/peer
+      - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/peerOrganizations/org2.example.com/peers/peer0.org2.example.com/tls:/etc/hyperledger/tls/peer
+      - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/peerOrganizations/tls.example.com/tlsca:/etc/hyperledger/orgs/tls.example.com/tlsca
     networks:
       default:
         aliases:
@@ -207,17 +270,77 @@ services:
       - orderer1
       - builder
       - golangruntime
+      - chaincoded
+
+  org2peer2:
+    image: ${FABRIC_DOCKER_REGISTRY}${FABRIC_PEER_FIXTURE_IMAGE}:${FABRIC_ARCH}${FABRIC_ARCH_SEP}${FABRIC_PEER_FIXTURE_TAG}
+    environment:
+      - CORE_VM_ENDPOINT
+      - CORE_PEER_ID=peer1.org2.example.com
+      - CORE_LOGGING_PEER=info
+      #- CORE_LOGGING_MSP=debug
+      #- CORE_LOGGING_GRPC=debug
+      # - CORE_LOGGING_GOSSIP=debug
+      # - CORE_CHAINCODE_STARTUPTIMEOUT=30s
+      - CORE_CHAINCODE_LOGGING_SHIM=debug
+      - CORE_CHAINCODE_LOGGING_LEVEL=debug
+      - CORE_CHAINCODE_BUILDER=${FABRIC_DOCKER_REGISTRY}${FABRIC_BUILDER_FIXTURE_IMAGE}:${FABRIC_ARCH}${FABRIC_ARCH_SEP}${FABRIC_BUILDER_FIXTURE_TAG}
+      - CORE_CHAINCODE_GOLANG_RUNTIME=${FABRIC_BASE_DOCKER_REGISTRY}${FABRIC_BASEOS_FIXTURE_IMAGE}:${FABRIC_ARCH}${FABRIC_ARCH_SEP}${FABRIC_BASEOS_FIXTURE_TAG}
+      - CORE_CHAINCODE_EXECUTETIMEOUT=120s
+      - CORE_VM_DOCKER_ATTACHSTDOUT=false
+      - CORE_PEER_LOCALMSPID=Org2MSP
+      - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/msp/peer
+      - CORE_PEER_LISTENADDRESS=0.0.0.0:9051
+      - CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:9052
+      - CORE_PEER_ADDRESS=peer1.org2.example.com:9051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer1.org2.example.com:9051
+      - CORE_PEER_GOSSIP_BOOTSTRAP=peer0.org2.example.com:8051
+      - CORE_PEER_TLS_ENABLED=true
+      - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/tls/peer/server.key
+      - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/tls/peer/server.crt
+      - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/tls/peer/ca.crt
+      - CORE_PEER_TLS_CLIENTAUTHREQUIRED
+      - CORE_PEER_TLS_CLIENTROOTCAS_FILES
+      # # the following setting starts chaincode containers on the same
+      # # bridge network as the peers
+      # # https://docs.docker.com/compose/networking/
+      - CORE_PEER_NETWORKID=${CORE_PEER_NETWORKID}
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=${CORE_PEER_NETWORKID}_default
+    #comment out logging.driver in order to render the debug logs
+    logging:
+      driver: none
+    working_dir: /opt/gopath/src/github.com/hyperledger/fabric
+    command: peer node start
+    ports:
+      - "9051:9051"
+    expose:
+      - "9051"
+      - "9052"
+    volumes:
+      - /var/run/:/host/var/run/
+      - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/peerOrganizations/org2.example.com/peers/peer1.org2.example.com/msp:/etc/hyperledger/msp/peer
+      - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/peerOrganizations/org2.example.com/peers/peer1.org2.example.com/tls:/etc/hyperledger/tls/peer
+      - ../fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config/peerOrganizations/tls.example.com/tlsca:/etc/hyperledger/orgs/tls.example.com/tlsca
+    networks:
+      default:
+        aliases:
+          - peer1.org2.example.com
+    depends_on:
+      - orderer1
+      - builder
+      - golangruntime
+      - chaincoded
 
  # builder is only here to create a dependency on the image (not used as part of compose)
   builder:
-    image: ${FABRIC_DOCKER_REGISTRY}${FABRIC_BUILDER_FIXTURE_IMAGE}:${ARCH}${ARCH_SEP}${FABRIC_BUILDER_FIXTURE_TAG}
+    image: ${FABRIC_DOCKER_REGISTRY}${FABRIC_BUILDER_FIXTURE_IMAGE}:${FABRIC_ARCH}${FABRIC_ARCH_SEP}${FABRIC_BUILDER_FIXTURE_TAG}
     command: tail -F anything
     logging:
       driver: none
 
  # golangruntime is only here to create a dependency on the image (not used as part of compose)
   golangruntime:
-    image: ${FABRIC_DOCKER_REGISTRY}${FABRIC_BASEOS_FIXTURE_IMAGE}:${BASE_ARCH}-${FABRIC_BASEOS_FIXTURE_TAG}
+    image: ${FABRIC_BASE_DOCKER_REGISTRY}${FABRIC_BASEOS_FIXTURE_IMAGE}:${FABRIC_ARCH}${FABRIC_ARCH_SEP}${FABRIC_BASEOS_FIXTURE_TAG}
     command: tail -F anything
     logging:
       driver: none

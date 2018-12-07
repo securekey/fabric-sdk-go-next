@@ -26,22 +26,24 @@ import (
 	"crypto/rsa"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/pem"
 	"fmt"
 	"io/ioutil"
 	"strings"
 
-	"github.com/hyperledger/fabric-sdk-go/api/apicryptosuite"
-	"github.com/hyperledger/fabric-sdk-go/pkg/errors"
+	"github.com/pkg/errors"
 
 	"github.com/cloudflare/cfssl/csr"
+	"github.com/cloudflare/cfssl/helpers"
 	factory "github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric-ca/sdkpatch/cryptosuitebridge"
 	log "github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric-ca/sdkpatch/logbridge"
+	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/core"
 )
 
 // getBCCSPKeyOpts generates a key as specified in the request.
 // This supports ECDSA and RSA.
-func getBCCSPKeyOpts(kr csr.KeyRequest, ephemeral bool) (opts apicryptosuite.KeyGenOpts, err error) {
+func getBCCSPKeyOpts(kr csr.KeyRequest, ephemeral bool) (opts core.KeyGenOpts, err error) {
 	if kr == nil {
 		return factory.GetECDSAKeyGenOpts(ephemeral), nil
 	}
@@ -78,7 +80,7 @@ func getBCCSPKeyOpts(kr csr.KeyRequest, ephemeral bool) (opts apicryptosuite.Key
 }
 
 // GetSignerFromCert load private key represented by ski and return bccsp signer that conforms to crypto.Signer
-func GetSignerFromCert(cert *x509.Certificate, csp apicryptosuite.CryptoSuite) (apicryptosuite.Key, crypto.Signer, error) {
+func GetSignerFromCert(cert *x509.Certificate, csp core.CryptoSuite) (core.Key, crypto.Signer, error) {
 	if csp == nil {
 		return nil, nil, errors.New("CSP was not initialized")
 	}
@@ -88,9 +90,15 @@ func GetSignerFromCert(cert *x509.Certificate, csp apicryptosuite.CryptoSuite) (
 		return nil, nil, errors.WithMessage(err, "Failed to import certificate's public key")
 	}
 	// Get the key given the SKI value
-	privateKey, err := csp.GetKey(certPubK.SKI())
+	ski := certPubK.SKI()
+	privateKey, err := csp.GetKey(ski)
 	if err != nil {
 		return nil, nil, errors.WithMessage(err, "Could not find matching private key for SKI")
+	}
+	// BCCSP returns a public key if the private key for the SKI wasn't found, so
+	// we need to return an error in that case.
+	if !privateKey.Private() {
+		return nil, nil, errors.Errorf("The private key associated with the certificate with SKI '%s' was not found", hex.EncodeToString(ski))
 	}
 	// Construct and initialize the signer
 	signer, err := factory.NewCspSigner(csp, privateKey)
@@ -100,9 +108,26 @@ func GetSignerFromCert(cert *x509.Certificate, csp apicryptosuite.CryptoSuite) (
 	return privateKey, signer, nil
 }
 
+// GetSignerFromCertFile load skiFile and load private key represented by ski and return bccsp signer that conforms to crypto.Signer
+func GetSignerFromCertFile(certFile string, csp core.CryptoSuite) (core.Key, crypto.Signer, *x509.Certificate, error) {
+	// Load cert file
+	certBytes, err := ioutil.ReadFile(certFile)
+	if err != nil {
+		return nil, nil, nil, errors.Wrapf(err, "Could not read certFile '%s'", certFile)
+	}
+	// Parse certificate
+	parsedCa, err := helpers.ParseCertificatePEM(certBytes)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	// Get the signer from the cert
+	key, cspSigner, err := GetSignerFromCert(parsedCa, csp)
+	return key, cspSigner, parsedCa, err
+}
+
 // BCCSPKeyRequestGenerate generates keys through BCCSP
 // somewhat mirroring to cfssl/req.KeyRequest.Generate()
-func BCCSPKeyRequestGenerate(req *csr.CertificateRequest, myCSP apicryptosuite.CryptoSuite) (apicryptosuite.Key, crypto.Signer, error) {
+func BCCSPKeyRequestGenerate(req *csr.CertificateRequest, myCSP core.CryptoSuite) (core.Key, crypto.Signer, error) {
 	log.Infof("generating key: %+v", req.KeyRequest)
 	keyOpts, err := getBCCSPKeyOpts(req.KeyRequest, false)
 	if err != nil {
@@ -112,7 +137,6 @@ func BCCSPKeyRequestGenerate(req *csr.CertificateRequest, myCSP apicryptosuite.C
 	if err != nil {
 		return nil, nil, err
 	}
-
 	cspSigner, err := factory.NewCspSigner(myCSP, key)
 	if err != nil {
 		return nil, nil, errors.WithMessage(err, "Failed initializing CryptoSigner")
@@ -121,7 +145,7 @@ func BCCSPKeyRequestGenerate(req *csr.CertificateRequest, myCSP apicryptosuite.C
 }
 
 // ImportBCCSPKeyFromPEM attempts to create a private BCCSP key from a pem file keyFile
-func ImportBCCSPKeyFromPEM(keyFile string, myCSP apicryptosuite.CryptoSuite, temporary bool) (apicryptosuite.Key, error) {
+func ImportBCCSPKeyFromPEM(keyFile string, myCSP core.CryptoSuite, temporary bool) (core.Key, error) {
 	keyBuff, err := ioutil.ReadFile(keyFile)
 	if err != nil {
 		return nil, err
@@ -134,8 +158,9 @@ func ImportBCCSPKeyFromPEM(keyFile string, myCSP apicryptosuite.CryptoSuite, tem
 }
 
 // ImportBCCSPKeyFromPEMBytes attempts to create a private BCCSP key from a pem byte slice
-func ImportBCCSPKeyFromPEMBytes(keyBuff []byte, myCSP apicryptosuite.CryptoSuite, temporary bool) (apicryptosuite.Key, error) {
+func ImportBCCSPKeyFromPEMBytes(keyBuff []byte, myCSP core.CryptoSuite, temporary bool) (core.Key, error) {
 	keyFile := "pem bytes"
+
 	key, err := factory.PEMtoPrivateKey(keyBuff, nil)
 	if err != nil {
 		return nil, errors.WithMessage(err, fmt.Sprintf("Failed parsing private key from %s", keyFile))
@@ -166,12 +191,9 @@ func ImportBCCSPKeyFromPEMBytes(keyBuff []byte, myCSP apicryptosuite.CryptoSuite
 //
 // This function originated from crypto/tls/tls.go and was adapted to use a
 // BCCSP Signer
-func LoadX509KeyPair(certFile, keyFile string, csp apicryptosuite.CryptoSuite) (*tls.Certificate, error) {
+func LoadX509KeyPair(certFile, keyFile []byte, csp core.CryptoSuite) (*tls.Certificate, error) {
 
-	certPEMBlock, err := ioutil.ReadFile(certFile)
-	if err != nil {
-		return nil, err
-	}
+	certPEMBlock := certFile
 
 	cert := &tls.Certificate{}
 	var skippedBlockTypes []string
@@ -190,10 +212,10 @@ func LoadX509KeyPair(certFile, keyFile string, csp apicryptosuite.CryptoSuite) (
 
 	if len(cert.Certificate) == 0 {
 		if len(skippedBlockTypes) == 0 {
-			return nil, errors.Errorf("Failed to find PEM block in file %s", certFile)
+			return nil, errors.New("Failed to find PEM block in bytes")
 		}
 		if len(skippedBlockTypes) == 1 && strings.HasSuffix(skippedBlockTypes[0], "PRIVATE KEY") {
-			return nil, errors.Errorf("Failed to find certificate PEM data in file %s, but did find a private key; PEM inputs may have been switched", certFile)
+			return nil, errors.New("Failed to find certificate PEM data in bytes, but did find a private key; PEM inputs may have been switched")
 		}
 		return nil, errors.Errorf("Failed to find \"CERTIFICATE\" PEM block in file %s after skipping PEM blocks of the following types: %v", certFile, skippedBlockTypes)
 	}
@@ -205,12 +227,12 @@ func LoadX509KeyPair(certFile, keyFile string, csp apicryptosuite.CryptoSuite) (
 
 	_, cert.PrivateKey, err = GetSignerFromCert(x509Cert, csp)
 	if err != nil {
-		if keyFile != "" {
+		if keyFile != nil {
 			log.Debugf("Could not load TLS certificate with BCCSP: %s", err)
-			log.Debugf("Attempting fallback with certfile %s and keyfile %s", certFile, keyFile)
-			fallbackCerts, err := tls.LoadX509KeyPair(certFile, keyFile)
+			log.Debug("Attempting fallback with provided certfile and keyfile")
+			fallbackCerts, err := tls.X509KeyPair(certFile, keyFile)
 			if err != nil {
-				return nil, errors.Wrapf(err, "Could not get the private key %s that matches %s", keyFile, certFile)
+				return nil, errors.Wrap(err, "Could not get the private key that matches the provided cert")
 			}
 			cert = &fallbackCerts
 		} else {

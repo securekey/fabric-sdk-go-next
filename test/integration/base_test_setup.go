@@ -7,68 +7,89 @@ SPDX-License-Identifier: Apache-2.0
 package integration
 
 import (
+	"fmt"
+	"go/build"
 	"os"
 	"path"
+	"path/filepath"
 	"testing"
-	"time"
 
-	"github.com/hyperledger/fabric-sdk-go/api/apiconfig"
-	ca "github.com/hyperledger/fabric-sdk-go/api/apifabca"
-	fab "github.com/hyperledger/fabric-sdk-go/api/apifabclient"
-	"github.com/hyperledger/fabric-sdk-go/api/apitxn"
-	chmgmt "github.com/hyperledger/fabric-sdk-go/api/apitxn/chmgmtclient"
-	resmgmt "github.com/hyperledger/fabric-sdk-go/api/apitxn/resmgmtclient"
-	packager "github.com/hyperledger/fabric-sdk-go/pkg/fabric-client/ccpackager/gopackager"
-	pb "github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/protos/peer"
-
-	deffab "github.com/hyperledger/fabric-sdk-go/def/fabapi"
-	"github.com/hyperledger/fabric-sdk-go/pkg/config"
-	"github.com/hyperledger/fabric-sdk-go/pkg/errors"
-	"github.com/hyperledger/fabric-sdk-go/pkg/fabric-client/events"
-	"github.com/hyperledger/fabric-sdk-go/pkg/fabric-client/orderer"
-	"github.com/hyperledger/fabric-sdk-go/pkg/fabric-client/peer"
+	"github.com/hyperledger/fabric-sdk-go/pkg/client/channel"
+	mspclient "github.com/hyperledger/fabric-sdk-go/pkg/client/msp"
+	"github.com/hyperledger/fabric-sdk-go/pkg/client/resmgmt"
+	"github.com/hyperledger/fabric-sdk-go/pkg/common/errors/retry"
+	"github.com/hyperledger/fabric-sdk-go/pkg/common/errors/status"
+	contextAPI "github.com/hyperledger/fabric-sdk-go/pkg/common/providers/context"
+	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/core"
+	fabAPI "github.com/hyperledger/fabric-sdk-go/pkg/common/providers/fab"
+	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/msp"
+	contextImpl "github.com/hyperledger/fabric-sdk-go/pkg/context"
+	"github.com/hyperledger/fabric-sdk-go/pkg/fab/resource"
+	"github.com/hyperledger/fabric-sdk-go/pkg/fabsdk"
+	"github.com/hyperledger/fabric-sdk-go/pkg/util/test"
+	"github.com/hyperledger/fabric-sdk-go/test/metadata"
 	"github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/common/cauthdsl"
+	cb "github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/protos/common"
+	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 )
 
 // BaseSetupImpl implementation of BaseTestSetup
 type BaseSetupImpl struct {
-	Client          fab.FabricClient
-	Channel         fab.Channel
-	EventHub        fab.EventHub
-	ConnectEventHub bool
-	ConfigFile      string
-	OrgID           string
-	ChannelID       string
-	ChainCodeID     string
-	Initialized     bool
-	ChannelConfig   string
-	AdminUser       ca.User
+	Identity          msp.Identity
+	Targets           []string
+	ConfigFile        string
+	OrgID             string
+	ChannelID         string
+	ChannelConfigFile string
 }
 
 // Initial B values for ExampleCC
 const (
 	ExampleCCInitB    = "200"
 	ExampleCCUpgradeB = "400"
+	AdminUser         = "Admin"
+	OrdererOrgName    = "OrdererOrg"
+	keyExp            = "key-%s-%s"
 )
 
 // ExampleCC query and transaction arguments
-var queryArgs = [][]byte{[]byte("query"), []byte("b")}
-var txArgs = [][]byte{[]byte("move"), []byte("a"), []byte("b"), []byte("1")}
+var defaultQueryArgs = [][]byte{[]byte("query"), []byte("b")}
+var defaultTxArgs = [][]byte{[]byte("move"), []byte("a"), []byte("b"), []byte("1")}
 
 // ExampleCC init and upgrade args
 var initArgs = [][]byte{[]byte("init"), []byte("a"), []byte("100"), []byte("b"), []byte(ExampleCCInitB)}
 var upgradeArgs = [][]byte{[]byte("init"), []byte("a"), []byte("100"), []byte("b"), []byte(ExampleCCUpgradeB)}
+var resetArgs = [][]byte{[]byte("a"), []byte("100"), []byte("b"), []byte(ExampleCCInitB)}
 
-var resMgmtClient resmgmt.ResourceMgmtClient
-
-// ExampleCCQueryArgs returns example cc query args
-func ExampleCCQueryArgs() [][]byte {
-	return queryArgs
+// ExampleCCDefaultQueryArgs returns example cc query args
+func ExampleCCDefaultQueryArgs() [][]byte {
+	return defaultQueryArgs
 }
 
-// ExampleCCTxArgs returns example cc move funds args
-func ExampleCCTxArgs() [][]byte {
-	return txArgs
+// ExampleCCQueryArgs returns example cc query args
+func ExampleCCQueryArgs(key string) [][]byte {
+	return [][]byte{[]byte("query"), []byte(key)}
+}
+
+// ExampleCCTxArgs returns example cc query args
+func ExampleCCTxArgs(from, to, val string) [][]byte {
+	return [][]byte{[]byte("move"), []byte(from), []byte(to), []byte(val)}
+}
+
+// ExampleCCDefaultTxArgs returns example cc move funds args
+func ExampleCCDefaultTxArgs() [][]byte {
+	return defaultTxArgs
+}
+
+// ExampleCCTxRandomSetArgs returns example cc set args with random key-value pairs
+func ExampleCCTxRandomSetArgs() [][]byte {
+	return [][]byte{[]byte("set"), []byte(GenerateRandomID()), []byte(GenerateRandomID())}
+}
+
+//ExampleCCTxSetArgs sets the given key value in examplecc
+func ExampleCCTxSetArgs(key, value string) [][]byte {
+	return [][]byte{[]byte("set"), []byte(key), []byte(value)}
 }
 
 //ExampleCCInitArgs returns example cc initialization args
@@ -81,303 +102,362 @@ func ExampleCCUpgradeArgs() [][]byte {
 	return upgradeArgs
 }
 
-// Initialize reads configuration from file and sets up client, channel and event hub
-func (setup *BaseSetupImpl) Initialize(t *testing.T) error {
-	// Create SDK setup for the integration tests
-	sdkOptions := deffab.Options{
-		ConfigFile: setup.ConfigFile,
-	}
-
-	sdk, err := deffab.NewSDK(sdkOptions)
+// IsJoinedChannel returns true if the given peer has joined the given channel
+func IsJoinedChannel(channelID string, resMgmtClient *resmgmt.Client, peer fabAPI.Peer) (bool, error) {
+	resp, err := resMgmtClient.QueryChannels(resmgmt.WithTargets(peer))
 	if err != nil {
-		return errors.WithMessage(err, "SDK init failed")
+		return false, err
 	}
+	for _, chInfo := range resp.Channels {
+		if chInfo.ChannelId == channelID {
+			return true, nil
+		}
+	}
+	return false, nil
+}
 
-	session, err := sdk.NewPreEnrolledUserSession(setup.OrgID, "Admin")
+// Initialize reads configuration from file and sets up client and channel
+func (setup *BaseSetupImpl) Initialize(sdk *fabsdk.FabricSDK) error {
+
+	mspClient, err := mspclient.New(sdk.Context(), mspclient.WithOrg(setup.OrgID))
+	adminIdentity, err := mspClient.GetSigningIdentity(AdminUser)
 	if err != nil {
-		return errors.WithMessage(err, "failed getting admin user session for org")
+		return errors.WithMessage(err, "failed to get client context")
 	}
+	setup.Identity = adminIdentity
 
-	sc, err := sdk.NewSystemClient(session)
+	var cfgBackends []core.ConfigBackend
+	configBackend, err := sdk.Config()
 	if err != nil {
-		return errors.WithMessage(err, "NewSystemClient failed")
-	}
-
-	setup.Client = sc
-	setup.AdminUser = session.Identity()
-
-	channel, err := setup.GetChannel(setup.Client, setup.ChannelID, []string{setup.OrgID})
-	if err != nil {
-		return errors.Wrapf(err, "create channel (%s) failed: %v", setup.ChannelID)
-	}
-	setup.Channel = channel
-
-	// Channel management client is responsible for managing channels (create/update)
-	chMgmtClient, err := sdk.NewChannelMgmtClientWithOpts("Admin", &deffab.ChannelMgmtClientOpts{OrgName: "ordererorg"})
-	if err != nil {
-		t.Fatalf("Failed to create new channel management client: %s", err)
-	}
-
-	// Resource management client is responsible for managing resources (joining channels, install/instantiate/upgrade chaincodes)
-	resMgmtClient, err = sdk.NewResourceMgmtClient("Admin")
-	if err != nil {
-		t.Fatalf("Failed to create new resource management client: %s", err)
-	}
-
-	// Check if primary peer has joined channel
-	alreadyJoined, err := HasPrimaryPeerJoinedChannel(sc, channel)
-	if err != nil {
-		return errors.WithMessage(err, "failed while checking if primary peer has already joined channel")
-	}
-
-	if !alreadyJoined {
-
-		// Channel config signing user (has to belong to one of channel orgs)
-		org1Admin, err := sdk.NewPreEnrolledUser("Org1", "Admin")
+		//For some tests SDK may not have backend set, try with config file if backend is missing
+		cfgBackends, err = ConfigBackend()
 		if err != nil {
-			return errors.WithMessage(err, "failed getting Org1 admin user")
+			return errors.Wrapf(err, "failed to get config backend from config: %s", err)
 		}
-
-		// Create channel (or update if it already exists)
-		req := chmgmt.SaveChannelRequest{ChannelID: setup.ChannelID, ChannelConfig: setup.ChannelConfig, SigningUser: org1Admin}
-
-		if err = chMgmtClient.SaveChannel(req); err != nil {
-			return errors.WithMessage(err, "SaveChannel failed")
-		}
-
-		time.Sleep(time.Second * 3)
-
-		if err = channel.Initialize(nil); err != nil {
-			return errors.WithMessage(err, "channel init failed")
-		}
-
-		if err = resMgmtClient.JoinChannel(setup.ChannelID); err != nil {
-			return errors.WithMessage(err, "JoinChannel failed")
-		}
+	} else {
+		cfgBackends = append(cfgBackends, configBackend)
 	}
 
-	if err := setup.setupEventHub(t, sc); err != nil {
-		return err
+	targets, err := OrgTargetPeers([]string{setup.OrgID}, cfgBackends...)
+	if err != nil {
+		return errors.Wrapf(err, "loading target peers from config failed")
 	}
+	setup.Targets = targets
 
-	setup.Initialized = true
+	r, err := os.Open(setup.ChannelConfigFile)
+	if err != nil {
+		return errors.Wrapf(err, "opening channel config file failed")
+	}
+	defer func() {
+		if err = r.Close(); err != nil {
+			test.Logf("close error %v", err)
+		}
+
+	}()
+
+	// Create channel for tests
+	req := resmgmt.SaveChannelRequest{ChannelID: setup.ChannelID, ChannelConfig: r, SigningIdentities: []msp.SigningIdentity{adminIdentity}}
+	if err = InitializeChannel(sdk, setup.OrgID, req, targets); err != nil {
+		return errors.WithMessage(err, "failed to initialize channel")
+	}
 
 	return nil
 }
 
-func (setup *BaseSetupImpl) setupEventHub(t *testing.T, client fab.FabricClient) error {
-	eventHub, err := setup.getEventHub(t, client)
+// GetDeployPath returns the path to the chaincode fixtures
+func GetDeployPath() string {
+	const ccPath = "test/fixtures/testdata"
+	return path.Join(goPath(), "src", metadata.Project, ccPath)
+}
+
+// GetChannelConfigPath returns the path to the named channel config file
+func GetChannelConfigPath(filename string) string {
+	return path.Join(goPath(), "src", metadata.Project, metadata.ChannelConfigPath, filename)
+}
+
+// GetConfigPath returns the path to the named config fixture file
+func GetConfigPath(filename string) string {
+	const configPath = "test/fixtures/config"
+	return path.Join(goPath(), "src", metadata.Project, configPath, filename)
+}
+
+// GetConfigOverridesPath returns the path to the named config override fixture file
+func GetConfigOverridesPath(filename string) string {
+	const configPath = "test/fixtures/config"
+	return path.Join(goPath(), "src", metadata.Project, configPath, "overrides", filename)
+}
+
+// goPath returns the current GOPATH. If the system
+// has multiple GOPATHs then the first is used.
+func goPath() string {
+	gpDefault := build.Default.GOPATH
+	gps := filepath.SplitList(gpDefault)
+
+	return gps[0]
+}
+
+// OrgContext provides SDK client context for a given org
+type OrgContext struct {
+	OrgID                string
+	CtxProvider          contextAPI.ClientProvider
+	SigningIdentity      msp.SigningIdentity
+	ResMgmt              *resmgmt.Client
+	Peers                []fabAPI.Peer
+	AnchorPeerConfigFile string
+}
+
+// CreateChannelAndUpdateAnchorPeers creates the channel and updates all of the anchor peers for all orgs
+func CreateChannelAndUpdateAnchorPeers(t *testing.T, sdk *fabsdk.FabricSDK, channelID string, channelConfigFile string, orgsContext []*OrgContext) error {
+	ordererCtx := sdk.Context(fabsdk.WithUser(AdminUser), fabsdk.WithOrg(OrdererOrgName))
+
+	// Channel management client is responsible for managing channels (create/update channel)
+	chMgmtClient, err := resmgmt.New(ordererCtx)
+	if err != nil {
+		return errors.New("failed to get a new resmgmt client for orderer")
+	}
+
+	var lastConfigBlock uint64
+	var signingIdentities []msp.SigningIdentity
+	for _, orgCtx := range orgsContext {
+		signingIdentities = append(signingIdentities, orgCtx.SigningIdentity)
+	}
+
+	req := resmgmt.SaveChannelRequest{
+		ChannelID:         channelID,
+		ChannelConfigPath: GetChannelConfigPath(channelConfigFile),
+		SigningIdentities: signingIdentities,
+	}
+	_, err = chMgmtClient.SaveChannel(req, resmgmt.WithRetry(retry.DefaultResMgmtOpts), resmgmt.WithOrdererEndpoint("orderer.example.com"))
 	if err != nil {
 		return err
 	}
 
-	if setup.ConnectEventHub {
-		if err := eventHub.Connect(); err != nil {
-			return errors.WithMessage(err, "eventHub connect failed")
+	lastConfigBlock = WaitForOrdererConfigUpdate(t, orgsContext[0].ResMgmt, channelID, true, lastConfigBlock)
+
+	for _, orgCtx := range orgsContext {
+		req := resmgmt.SaveChannelRequest{
+			ChannelID:         channelID,
+			ChannelConfigPath: GetChannelConfigPath(orgCtx.AnchorPeerConfigFile),
+			SigningIdentities: []msp.SigningIdentity{orgCtx.SigningIdentity},
 		}
+		if _, err := orgCtx.ResMgmt.SaveChannel(req, resmgmt.WithRetry(retry.DefaultResMgmtOpts), resmgmt.WithOrdererEndpoint("orderer.example.com")); err != nil {
+			return err
+		}
+
+		lastConfigBlock = WaitForOrdererConfigUpdate(t, orgCtx.ResMgmt, channelID, false, lastConfigBlock)
 	}
-	setup.EventHub = eventHub
 
 	return nil
 }
 
-// InitConfig ...
-func (setup *BaseSetupImpl) InitConfig() (apiconfig.Config, error) {
-	configImpl, err := config.InitConfig(setup.ConfigFile)
+// JoinPeersToChannel joins all peers in all of the given orgs to the given channel
+func JoinPeersToChannel(channelID string, orgsContext []*OrgContext) error {
+	for _, orgCtx := range orgsContext {
+		err := orgCtx.ResMgmt.JoinChannel(
+			channelID,
+			resmgmt.WithRetry(retry.DefaultResMgmtOpts),
+			resmgmt.WithOrdererEndpoint("orderer.example.com"),
+			resmgmt.WithTargets(orgCtx.Peers...),
+		)
+		if err != nil {
+			return errors.Wrapf(err, "failed to join peers in org [%s] to channel [%s]", orgCtx.OrgID, channelID)
+		}
+	}
+	return nil
+}
+
+// InstallChaincodeWithOrgContexts installs the given chaincode to orgs
+func InstallChaincodeWithOrgContexts(orgs []*OrgContext, ccPkg *resource.CCPackage, ccPath, ccID, ccVersion string) error {
+	for _, orgCtx := range orgs {
+		if err := InstallChaincode(orgCtx.ResMgmt, ccPkg, ccPath, ccID, ccVersion, orgCtx.Peers); err != nil {
+			return errors.Wrapf(err, "failed to install chaincode to peers in org [%s]", orgCtx.OrgID)
+		}
+	}
+
+	return nil
+}
+
+// InstallChaincode installs the given chaincode to the given peers
+func InstallChaincode(resMgmt *resmgmt.Client, ccPkg *resource.CCPackage, ccPath, ccName, ccVersion string, localPeers []fabAPI.Peer) error {
+	installCCReq := resmgmt.InstallCCRequest{Name: ccName, Path: ccPath, Version: ccVersion, Package: ccPkg}
+	_, err := resMgmt.InstallCC(installCCReq, resmgmt.WithRetry(retry.DefaultResMgmtOpts))
+	if err != nil {
+		return err
+	}
+
+	installed, err := queryInstalledCC(resMgmt, ccName, ccVersion, localPeers)
+
+	if err != nil {
+		return err
+	}
+
+	if !installed {
+		return errors.New("chaincode was not installed on all peers")
+	}
+
+	return nil
+}
+
+// InstantiateChaincode instantiates the given chaincode to the given channel
+func InstantiateChaincode(resMgmt *resmgmt.Client, channelID, ccName, ccPath, ccVersion string, ccPolicyStr string, args [][]byte, collConfigs ...*cb.CollectionConfig) (resmgmt.InstantiateCCResponse, error) {
+	ccPolicy, err := cauthdsl.FromString(ccPolicyStr)
+	if err != nil {
+		return resmgmt.InstantiateCCResponse{}, errors.Wrapf(err, "error creating CC policy [%s]", ccPolicyStr)
+	}
+
+	return resMgmt.InstantiateCC(
+		channelID,
+		resmgmt.InstantiateCCRequest{
+			Name:       ccName,
+			Path:       ccPath,
+			Version:    ccVersion,
+			Args:       args,
+			Policy:     ccPolicy,
+			CollConfig: collConfigs,
+		},
+		resmgmt.WithRetry(retry.DefaultResMgmtOpts),
+	)
+}
+
+// DiscoverLocalPeers queries the local peers for the given MSP context and returns all of the peers. If
+// the number of peers does not match the expected number then an error is returned.
+func DiscoverLocalPeers(ctxProvider contextAPI.ClientProvider, expectedPeers int) ([]fabAPI.Peer, error) {
+	ctx, err := contextImpl.NewLocal(ctxProvider)
+	if err != nil {
+		return nil, errors.Wrap(err, "error creating local context")
+	}
+
+	discoveredPeers, err := retry.NewInvoker(retry.New(retry.TestRetryOpts)).Invoke(
+		func() (interface{}, error) {
+			peers, err := ctx.LocalDiscoveryService().GetPeers()
+			if err != nil {
+				return nil, errors.Wrapf(err, "error getting peers for MSP [%s]", ctx.Identifier().MSPID)
+			}
+			if len(peers) < expectedPeers {
+				return nil, status.New(status.TestStatus, status.GenericTransient.ToInt32(), fmt.Sprintf("Expecting %d peers but got %d", expectedPeers, len(peers)), nil)
+			}
+			return peers, nil
+		},
+	)
 	if err != nil {
 		return nil, err
 	}
-	return configImpl, nil
+
+	return discoveredPeers.([]fabAPI.Peer), nil
 }
 
-// InstallCC use low level client to install chaincode
-func (setup *BaseSetupImpl) InstallCC(name string, path string, version string, ccPackage *fab.CCPackage) error {
-
-	icr := fab.InstallChaincodeRequest{Name: name, Path: path, Version: version, Package: ccPackage, Targets: peer.PeersToTxnProcessors(setup.Channel.Peers())}
-
-	transactionProposalResponse, _, err := setup.Client.InstallChaincode(icr)
-
-	if err != nil {
-		return errors.WithMessage(err, "InstallChaincode failed")
-	}
-	for _, v := range transactionProposalResponse {
-		if v.Err != nil {
-			return errors.WithMessage(v.Err, "InstallChaincode endorser failed")
-		}
-	}
-
-	return nil
-}
-
-// GetDeployPath ..
-func (setup *BaseSetupImpl) GetDeployPath() string {
-	pwd, _ := os.Getwd()
-	return path.Join(pwd, "../../fixtures/testdata")
-}
-
-// InstallAndInstantiateExampleCC install and instantiate using resource management client
-func (setup *BaseSetupImpl) InstallAndInstantiateExampleCC() error {
-
-	if setup.ChainCodeID == "" {
-		setup.ChainCodeID = GenerateRandomID()
-	}
-
-	return setup.InstallAndInstantiateCC(setup.ChainCodeID, "github.com/example_cc", "v0", setup.GetDeployPath(), initArgs)
-}
-
-// InstallAndInstantiateCC install and instantiate using resource management client
-func (setup *BaseSetupImpl) InstallAndInstantiateCC(ccName, ccPath, ccVersion, goPath string, ccArgs [][]byte) error {
-
-	ccPkg, err := packager.NewCCPackage(ccPath, goPath)
+// EnsureChannelCreatedAndPeersJoined creates a channel, joins all peers in the given orgs to the channel and updates the anchor peers of each org.
+func EnsureChannelCreatedAndPeersJoined(t *testing.T, sdk *fabsdk.FabricSDK, channelID string, channelTxFile string, orgsContext []*OrgContext) error {
+	joined, err := IsJoinedChannel(channelID, orgsContext[0].ResMgmt, orgsContext[0].Peers[0])
 	if err != nil {
 		return err
 	}
 
-	_, err = resMgmtClient.InstallCC(resmgmt.InstallCCRequest{Name: ccName, Path: ccPath, Version: ccVersion, Package: ccPkg})
-	if err != nil {
+	if joined {
+		return nil
+	}
+
+	// Create the channel and update anchor peers for all orgs
+	if err := CreateChannelAndUpdateAnchorPeers(t, sdk, channelID, channelTxFile, orgsContext); err != nil {
 		return err
 	}
 
-	ccPolicy := cauthdsl.SignedByMspMember(setup.Client.UserContext().MspID())
-	return resMgmtClient.InstantiateCC("mychannel", resmgmt.InstantiateCCRequest{Name: ccName, Path: ccPath, Version: ccVersion, Args: ccArgs, Policy: ccPolicy})
+	return JoinPeersToChannel(channelID, orgsContext)
 }
 
-// GetChannel initializes and returns a channel based on config
-func (setup *BaseSetupImpl) GetChannel(client fab.FabricClient, channelID string, orgs []string) (fab.Channel, error) {
+// WaitForOrdererConfigUpdate waits until the config block update has been committed.
+// In Fabric 1.0 there is a bug that panics the orderer if more than one config update is added to the same block.
+// This function may be invoked after each config update as a workaround.
+func WaitForOrdererConfigUpdate(t *testing.T, client *resmgmt.Client, channelID string, genesis bool, lastConfigBlock uint64) uint64 {
 
-	channel, err := client.NewChannel(channelID)
-	if err != nil {
-		return nil, errors.WithMessage(err, "NewChannel failed")
-	}
-
-	ordererConfig, err := client.Config().RandomOrdererConfig()
-	if err != nil {
-		return nil, errors.WithMessage(err, "RandomOrdererConfig failed")
-	}
-
-	orderer, err := orderer.NewOrdererFromConfig(ordererConfig, client.Config())
-	if err != nil {
-		return nil, errors.WithMessage(err, "NewOrderer failed")
-	}
-	err = channel.AddOrderer(orderer)
-	if err != nil {
-		return nil, errors.WithMessage(err, "adding orderer failed")
-	}
-
-	for _, org := range orgs {
-		peerConfig, err := client.Config().PeersConfig(org)
-		if err != nil {
-			return nil, errors.WithMessage(err, "reading peer config failed")
-		}
-		for _, p := range peerConfig {
-			endorser, err := deffab.NewPeerFromConfig(&apiconfig.NetworkPeer{PeerConfig: p}, client.Config())
+	blockNum, err := retry.NewInvoker(retry.New(retry.TestRetryOpts)).Invoke(
+		func() (interface{}, error) {
+			chConfig, err := client.QueryConfigFromOrderer(channelID, resmgmt.WithOrdererEndpoint("orderer.example.com"))
 			if err != nil {
-				return nil, errors.WithMessage(err, "NewPeer failed")
+				return nil, status.New(status.TestStatus, status.GenericTransient.ToInt32(), err.Error(), nil)
 			}
-			err = channel.AddPeer(endorser)
+
+			currentBlock := chConfig.BlockNumber()
+			if currentBlock <= lastConfigBlock && !genesis {
+				return nil, status.New(status.TestStatus, status.GenericTransient.ToInt32(), fmt.Sprintf("Block number was not incremented [%d, %d]", currentBlock, lastConfigBlock), nil)
+			}
+			return &currentBlock, nil
+		},
+	)
+
+	require.NoError(t, err)
+	return *blockNum.(*uint64)
+}
+
+func queryInstalledCC(resMgmt *resmgmt.Client, ccName, ccVersion string, peers []fabAPI.Peer) (bool, error) {
+	installed, err := retry.NewInvoker(retry.New(retry.TestRetryOpts)).Invoke(
+		func() (interface{}, error) {
+			ok, err := isCCInstalled(resMgmt, ccName, ccVersion, peers)
 			if err != nil {
-				return nil, errors.WithMessage(err, "adding peer failed")
+				return &ok, err
 			}
+			if !ok {
+				return &ok, status.New(status.TestStatus, status.GenericTransient.ToInt32(), fmt.Sprintf("Chaincode [%s:%s] is not installed on all peers in Org1", ccName, ccVersion), nil)
+			}
+			return &ok, nil
+		},
+	)
+
+	if err != nil {
+		s, ok := status.FromError(err)
+		if ok && s.Code == status.GenericTransient.ToInt32() {
+			return false, nil
 		}
+		return false, errors.WithMessage(err, "isCCInstalled invocation failed")
 	}
 
-	return channel, nil
+	return *(installed).(*bool), nil
 }
 
-// CreateAndSendTransactionProposal ... TODO duplicate
-func (setup *BaseSetupImpl) CreateAndSendTransactionProposal(channel fab.Channel, chainCodeID string,
-	fcn string, args [][]byte, targets []apitxn.ProposalProcessor, transientData map[string][]byte) ([]*apitxn.TransactionProposalResponse, apitxn.TransactionID, error) {
-
-	request := apitxn.ChaincodeInvokeRequest{
-		Targets:      targets,
-		Fcn:          fcn,
-		Args:         args,
-		TransientMap: transientData,
-		ChaincodeID:  chainCodeID,
-	}
-	transactionProposalResponses, txnID, err := channel.SendTransactionProposal(request)
-	if err != nil {
-		return nil, txnID, err
-	}
-
-	for _, v := range transactionProposalResponses {
-		if v.Err != nil {
-			return nil, txnID, errors.Wrapf(v.Err, "endorser %s failed", v.Endorser)
-		}
-	}
-
-	return transactionProposalResponses, txnID, nil
-}
-
-// CreateAndSendTransaction ...
-func (setup *BaseSetupImpl) CreateAndSendTransaction(channel fab.Channel, resps []*apitxn.TransactionProposalResponse) (*apitxn.TransactionResponse, error) {
-
-	tx, err := channel.CreateTransaction(resps)
-	if err != nil {
-		return nil, errors.WithMessage(err, "CreateTransaction failed")
-	}
-
-	transactionResponse, err := channel.SendTransaction(tx)
-	if err != nil {
-		return nil, errors.WithMessage(err, "SendTransaction failed")
-
-	}
-
-	if transactionResponse.Err != nil {
-		return nil, errors.Wrapf(transactionResponse.Err, "orderer %s failed", transactionResponse.Orderer)
-	}
-
-	return transactionResponse, nil
-}
-
-// RegisterTxEvent registers on the given eventhub for the give transaction
-// returns a boolean channel which receives true when the event is complete
-// and an error channel for errors
-// TODO - Duplicate
-func (setup *BaseSetupImpl) RegisterTxEvent(t *testing.T, txID apitxn.TransactionID, eventHub fab.EventHub) (chan bool, chan error) {
-	done := make(chan bool)
-	fail := make(chan error)
-
-	eventHub.RegisterTxEvent(txID, func(txId string, errorCode pb.TxValidationCode, err error) {
+func isCCInstalled(resMgmt *resmgmt.Client, ccName, ccVersion string, peers []fabAPI.Peer) (bool, error) {
+	installedOnAllPeers := true
+	for _, peer := range peers {
+		resp, err := resMgmt.QueryInstalledChaincodes(resmgmt.WithTargets(peer))
 		if err != nil {
-			t.Logf("Received error event for txid(%s)", txId)
-			fail <- err
-		} else {
-			t.Logf("Received success event for txid(%s)", txId)
-			done <- true
+			return false, errors.WithMessage(err, "querying for installed chaincodes failed")
 		}
-	})
 
-	return done, fail
+		found := false
+		for _, ccInfo := range resp.Chaincodes {
+			if ccInfo.Name == ccName && ccInfo.Version == ccVersion {
+				found = true
+				break
+			}
+		}
+		if !found {
+			installedOnAllPeers = false
+		}
+	}
+	return installedOnAllPeers, nil
 }
 
-// getEventHub initilizes the event hub
-func (setup *BaseSetupImpl) getEventHub(t *testing.T, client fab.FabricClient) (fab.EventHub, error) {
-	eventHub, err := events.NewEventHub(client)
+//GetKeyName creates random key name based on test name
+func GetKeyName(t *testing.T) string {
+	return fmt.Sprintf(keyExp, t.Name(), GenerateRandomID())
+}
+
+//ResetKeys resets given set of keys in example cc to given value
+func ResetKeys(t *testing.T, ctx contextAPI.ChannelProvider, chaincodeID, value string, keys ...string) {
+	chClient, err := channel.New(ctx)
 	if err != nil {
-		return nil, errors.WithMessage(err, "NewEventHub failed")
+		t.Fatalf("Failed to create new channel client for reseting keys: %s", err)
 	}
-	foundEventHub := false
-	peerConfig, err := client.Config().PeersConfig(setup.OrgID)
-	if err != nil {
-		return nil, errors.WithMessage(err, "PeersConfig failed")
-	}
-	for _, p := range peerConfig {
-		if p.URL != "" {
-			t.Logf("EventHub connect to peer (%s)", p.URL)
-			serverHostOverride := ""
-			if str, ok := p.GRPCOptions["ssl-target-name-override"].(string); ok {
-				serverHostOverride = str
-			}
-			eventHub.SetPeerAddr(p.EventURL, p.TLSCACerts.Path, serverHostOverride)
-			foundEventHub = true
-			break
+	for _, key := range keys {
+		// Synchronous transaction
+		_, err := chClient.Execute(
+			channel.Request{
+				ChaincodeID: chaincodeID,
+				Fcn:         "invoke",
+				Args:        ExampleCCTxSetArgs(key, value),
+			},
+			channel.WithRetry(retry.DefaultChannelOpts))
+		if err != nil {
+			t.Fatalf("Failed to reset keys: %s", err)
 		}
 	}
-
-	if !foundEventHub {
-		return nil, errors.New("event hub configuration not found")
-	}
-
-	return eventHub, nil
 }

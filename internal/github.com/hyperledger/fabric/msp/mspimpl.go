@@ -19,10 +19,10 @@ import (
 	"fmt"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/hyperledger/fabric-sdk-go/api/apicryptosuite"
 	factory "github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/sdkpatch/cryptosuitebridge"
-	"github.com/hyperledger/fabric-sdk-go/pkg/errors"
+	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/core"
 	m "github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/protos/msp"
+	"github.com/pkg/errors"
 )
 
 // mspSetupFuncType is the prototype of the setup function
@@ -30,6 +30,9 @@ type mspSetupFuncType func(config *m.FabricMSPConfig) error
 
 // validateIdentityOUsFuncType is the prototype of the function to validate identity's OUs
 type validateIdentityOUsFuncType func(id *identity) error
+
+// satisfiesPrincipalInternalFuncType is the prototype of the function to check if principals are satisfied
+type satisfiesPrincipalInternalFuncType func(id Identity, principal *m.MSPPrincipal) error
 
 // This is an instantiation of an MSP that
 // uses BCCSP for its cryptographic primitives.
@@ -43,6 +46,9 @@ type bccspmsp struct {
 
 	// internalValidateIdentityOusFunc is the pointer to the function to validate identity's OUs
 	internalValidateIdentityOusFunc validateIdentityOUsFuncType
+
+	// internalSatisfiesPrincipalInternalFunc is the pointer to the function to check if principals are satisfied
+	internalSatisfiesPrincipalInternalFunc satisfiesPrincipalInternalFuncType
 
 	// list of CA certs we trust
 	rootCerts []Identity
@@ -69,7 +75,7 @@ type bccspmsp struct {
 	admins []Identity
 
 	// the crypto provider
-	bccsp apicryptosuite.CryptoSuite
+	bccsp core.CryptoSuite
 
 	// the provider identifier for this MSP
 	name string
@@ -90,14 +96,14 @@ type bccspmsp struct {
 	ouEnforcement bool
 	// These are the OUIdentifiers of the clients, peers and orderers.
 	// They are used to tell apart these entities
-	clientOU, peerOU, ordererOU *OUIdentifier
+	clientOU, peerOU *OUIdentifier
 }
 
 // NewBccspMsp returns an MSP instance backed up by a BCCSP
 // crypto provider. It handles x.509 certificates and can
 // generate identities and signing identities backed by
 // certificates and keypairs
-func NewBccspMsp(version MSPVersion, cryptoSuite apicryptosuite.CryptoSuite) (MSP, error) {
+func NewBccspMsp(version MSPVersion, cryptoSuite core.CryptoSuite) (MSP, error) {
 	mspLogger.Debugf("Creating BCCSP-based MSP instance")
 
 	theMsp := &bccspmsp{}
@@ -107,9 +113,15 @@ func NewBccspMsp(version MSPVersion, cryptoSuite apicryptosuite.CryptoSuite) (MS
 	case MSPv1_0:
 		theMsp.internalSetupFunc = theMsp.setupV1
 		theMsp.internalValidateIdentityOusFunc = theMsp.validateIdentityOUsV1
+		theMsp.internalSatisfiesPrincipalInternalFunc = theMsp.satisfiesPrincipalInternalPreV13
 	case MSPv1_1:
 		theMsp.internalSetupFunc = theMsp.setupV11
 		theMsp.internalValidateIdentityOusFunc = theMsp.validateIdentityOUsV11
+		theMsp.internalSatisfiesPrincipalInternalFunc = theMsp.satisfiesPrincipalInternalPreV13
+	case MSPv1_3:
+		theMsp.internalSetupFunc = theMsp.setupV11
+		theMsp.internalValidateIdentityOusFunc = theMsp.validateIdentityOUsV11
+		theMsp.internalSatisfiesPrincipalInternalFunc = theMsp.satisfiesPrincipalInternalV13
 	default:
 		return nil, errors.Errorf("Invalid MSP version [%v]", version)
 	}
@@ -138,7 +150,7 @@ func (msp *bccspmsp) getCertFromPem(idBytes []byte) (*x509.Certificate, error) {
 	return cert, nil
 }
 
-func (msp *bccspmsp) getIdentityFromConf(idBytes []byte) (Identity, apicryptosuite.Key, error) {
+func (msp *bccspmsp) getIdentityFromConf(idBytes []byte) (Identity, core.Key, error) {
 	// get a cert
 	cert, err := msp.getCertFromPem(idBytes)
 	if err != nil {
@@ -308,8 +320,6 @@ func (msp *bccspmsp) hasOURoleInternal(id *identity, mspRole m.MSPRole_MSPRoleTy
 		nodeOUValue = msp.clientOU.OrganizationalUnitIdentifier
 	case m.MSPRole_PEER:
 		nodeOUValue = msp.peerOU.OrganizationalUnitIdentifier
-	case m.MSPRole_ORDERER:
-		nodeOUValue = msp.ordererOU.OrganizationalUnitIdentifier
 	default:
 		return fmt.Errorf("Invalid MSPRoleType. It must be CLIENT, PEER or ORDERER")
 	}
@@ -371,6 +381,58 @@ func (msp *bccspmsp) deserializeIdentityInternal(serializedIdentity []byte) (Ide
 
 // SatisfiesPrincipal returns null if the identity matches the principal or an error otherwise
 func (msp *bccspmsp) SatisfiesPrincipal(id Identity, principal *m.MSPPrincipal) error {
+	principals, err := collectPrincipals(principal, msp.GetVersion())
+	if err != nil {
+		return err
+	}
+	for _, principal := range principals {
+		err = msp.internalSatisfiesPrincipalInternalFunc(id, principal)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// collectPrincipals collects principals from combined principals into a single MSPPrincipal slice.
+func collectPrincipals(principal *m.MSPPrincipal, mspVersion MSPVersion) ([]*m.MSPPrincipal, error) {
+	switch principal.PrincipalClassification {
+	case m.MSPPrincipal_COMBINED:
+		// Combined principals are not supported in MSP v1.0 or v1.1
+		if mspVersion <= MSPv1_1 {
+			return nil, errors.Errorf("invalid principal type %d", int32(principal.PrincipalClassification))
+		}
+		// Principal is a combination of multiple principals.
+		principals := &m.CombinedPrincipal{}
+		err := proto.Unmarshal(principal.Principal, principals)
+		if err != nil {
+			return nil, errors.Wrap(err, "could not unmarshal CombinedPrincipal from principal")
+		}
+		// Return an error if there are no principals in the combined principal.
+		if len(principals.Principals) == 0 {
+			return nil, errors.New("No principals in CombinedPrincipal")
+		}
+		// Recursively call msp.collectPrincipals for all combined principals.
+		// There is no limit for the levels of nesting for the combined principals.
+		var principalsSlice []*m.MSPPrincipal
+		for _, cp := range principals.Principals {
+			internalSlice, err := collectPrincipals(cp, mspVersion)
+			if err != nil {
+				return nil, err
+			}
+			principalsSlice = append(principalsSlice, internalSlice...)
+		}
+		// All the combined principals have been collected into principalsSlice
+		return principalsSlice, nil
+	default:
+		return []*m.MSPPrincipal{principal}, nil
+	}
+}
+
+// satisfiesPrincipalInternalPreV13 takes as arguments the identity and the principal.
+// The function returns an error if one occurred.
+// The function implements the behavior of an MSP up to and including v1.1.
+func (msp *bccspmsp) satisfiesPrincipalInternalPreV13(id Identity, principal *m.MSPPrincipal) error {
 	switch principal.PrincipalClassification {
 	// in this case, we have to check whether the
 	// identity has a role in the msp - member or admin
@@ -411,8 +473,6 @@ func (msp *bccspmsp) SatisfiesPrincipal(id Identity, principal *m.MSPPrincipal) 
 		case m.MSPRole_CLIENT:
 			fallthrough
 		case m.MSPRole_PEER:
-			fallthrough
-		case m.MSPRole_ORDERER:
 			mspLogger.Debugf("Checking if identity satisfies role [%s] for %s", m.MSPRole_MSPRoleType_name[int32(mspRole.Role)], msp.name)
 			if err := msp.Validate(id); err != nil {
 				return errors.Wrapf(err, "The identity is not valid under this MSP [%s]", msp.name)
@@ -471,6 +531,35 @@ func (msp *bccspmsp) SatisfiesPrincipal(id Identity, principal *m.MSPPrincipal) 
 		return errors.New("The identities do not match")
 	default:
 		return errors.Errorf("invalid principal type %d", int32(principal.PrincipalClassification))
+	}
+}
+
+// satisfiesPrincipalInternalV13 takes as arguments the identity and the principal.
+// The function returns an error if one occurred.
+// The function implements the additional behavior expected of an MSP starting from v1.3.
+// For pre-v1.3 functionality, the function calls the satisfiesPrincipalInternalPreV13.
+func (msp *bccspmsp) satisfiesPrincipalInternalV13(id Identity, principal *m.MSPPrincipal) error {
+	switch principal.PrincipalClassification {
+	case m.MSPPrincipal_COMBINED:
+		return errors.New("SatisfiesPrincipalInternal shall not be called with a CombinedPrincipal")
+	case m.MSPPrincipal_ANONYMITY:
+		anon := &m.MSPIdentityAnonymity{}
+		err := proto.Unmarshal(principal.Principal, anon)
+		if err != nil {
+			return errors.Wrap(err, "could not unmarshal MSPIdentityAnonymity from principal")
+		}
+		switch anon.AnonymityType {
+		case m.MSPIdentityAnonymity_ANONYMOUS:
+			return errors.New("Principal is anonymous, but X.509 MSP does not support anonymous identities")
+		case m.MSPIdentityAnonymity_NOMINAL:
+			return nil
+		default:
+			return errors.Errorf("Unknown principal anonymity type: %d", anon.AnonymityType)
+		}
+
+	default:
+		// Use the pre-v1.3 function to check other principal types
+		return msp.satisfiesPrincipalInternalPreV13(id, principal)
 	}
 }
 

@@ -1,57 +1,39 @@
 #!/bin/bash
 #
-# Copyright Greg Haskins, IBM Corp, SecureKey Technologies Inc. All Rights Reserved.
+# Copyright SecureKey Technologies Inc. All Rights Reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
 #
 # This script runs Go linting and vetting tools
 
 set -e
-
+LINT_CHANGED_ONLY="${LINT_CHANGED_ONLY:-false}"
 GO_CMD="${GO_CMD:-go}"
-GOLINT_CMD=golint
-GOFMT_CMD=gofmt
-GOIMPORTS_CMD=goimports
+SCRIPT_DIR="$(dirname "$0")"
 
-PROJECT_PATH=$GOPATH/src/github.com/hyperledger/fabric-sdk-go
+REPO="github.com/hyperledger/fabric-sdk-go"
 
-declare -a arr=(
-"./api"
-"./def"
-"./pkg"
-"./test"
+echo "Running" $(basename "$0")
+
+source ${SCRIPT_DIR}/lib/find_packages.sh
+source ${SCRIPT_DIR}/lib/linter.sh
+
+# Find all packages that should be linted.
+declare -a PKG_SRC=(
+    "./pkg"
+    "./test"
 )
+declare PKG_EXCLUDE=""
+findPackages
 
-echo "Running linters..."
-for i in "${arr[@]}"
-do
-   echo "Checking $i"
-   OUTPUT="$($GOLINT_CMD $i/...)"
-   if [[ $OUTPUT ]]; then
-      echo "You should check the following golint suggestions:"
-      printf "$OUTPUT\n"
-      echo "end golint suggestions"
-   fi
+# Reduce Linter checks to changed packages.
+if [ "$LINT_CHANGED_ONLY" = true ]; then
+    findChangedLinterPkgs
+fi
 
-   OUTPUT="$($GO_CMD vet $i/...)"
-   if [[ $OUTPUT ]]; then
-      echo "You should check the following govet suggestions:"
-      printf "$OUTPUT\n"
-      echo "end govet suggestions"
-   fi
+if [ ${#PKGS[@]} -eq 0 ]; then
+    echo "Skipping tests since no packages were changed"
+    exit 0
+fi
 
-   found=`$GOFMT_CMD -l \`find $i -name "*.go" |grep -v "./vendor"\` 2>&1`
-   if [ $? -ne 0 ]; then
-      echo "The following files need reformatting with '$GO_FMT -w <file>':"
-      printf "$badformat\n"
-      exit 1
-   fi
-
-   OUTPUT="$($GOIMPORTS_CMD -srcdir $PROJECT_PATH -l $i)"
-   if [[ $OUTPUT ]]; then
-      echo "YOU MUST FIX THE FOLLOWING GOIMPORTS ERRORS:"
-      printf "$OUTPUT\n"
-      echo "END GOIMPORTS ERRORS"
-      exit 1
-   fi
-done
+runLinter

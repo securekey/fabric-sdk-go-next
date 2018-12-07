@@ -1,17 +1,7 @@
 /*
-Copyright IBM Corp. 2016 All Rights Reserved.
+Copyright IBM Corp. All Rights Reserved.
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-                 http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+SPDX-License-Identifier: Apache-2.0
 */
 /*
 Notice: This file has been modified for Hyperledger Fabric SDK Go usage.
@@ -25,8 +15,9 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/pem"
+	"net/http"
 
-	"github.com/hyperledger/fabric-sdk-go/pkg/errors"
+	"github.com/pkg/errors"
 
 	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric-ca/util"
 )
@@ -61,4 +52,17 @@ func BytesToX509Cert(bytes []byte) (*x509.Certificate, error) {
 		return nil, errors.Wrap(err, "Buffer was neither PEM nor DER encoding")
 	}
 	return cert, err
+}
+
+func addQueryParm(req *http.Request, name, value string) {
+	url := req.URL.Query()
+	url.Add(name, value)
+	req.URL.RawQuery = url.Encode()
+}
+
+// CertificateDecoder is needed to keep track of state, to see how many certificates
+// have been returned for each enrollment ID.
+type CertificateDecoder struct {
+	certIDCount map[string]int
+	storePath   string
 }

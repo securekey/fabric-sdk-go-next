@@ -21,7 +21,7 @@ import (
 	"math/big"
 	"reflect"
 
-	"github.com/hyperledger/fabric-sdk-go/pkg/errors"
+	"github.com/pkg/errors"
 )
 
 func (msp *bccspmsp) validateIdentity(id *identity) error {
@@ -188,8 +188,6 @@ func (msp *bccspmsp) validateIdentityOUsV11(id *identity) error {
 			nodeOU = msp.clientOU
 		case msp.peerOU.OrganizationalUnitIdentifier:
 			nodeOU = msp.peerOU
-		case msp.ordererOU.OrganizationalUnitIdentifier:
-			nodeOU = msp.ordererOU
 		default:
 			continue
 		}

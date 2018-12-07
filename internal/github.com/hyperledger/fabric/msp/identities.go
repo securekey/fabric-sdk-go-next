@@ -25,17 +25,18 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/hex"
+
+	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/core"
+
 	"encoding/pem"
 	"time"
-
-	"github.com/hyperledger/fabric-sdk-go/api/apicryptosuite"
 
 	"github.com/golang/protobuf/proto"
 	bccsp "github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/sdkpatch/cryptosuitebridge"
 	flogging "github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/sdkpatch/logbridge"
 	logging "github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/sdkpatch/logbridge"
-	"github.com/hyperledger/fabric-sdk-go/pkg/errors"
 	"github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/protos/msp"
+	"github.com/pkg/errors"
 )
 
 var mspIdentityLogger = flogging.MustGetLogger("msp/identity")
@@ -48,13 +49,13 @@ type identity struct {
 	cert *x509.Certificate
 
 	// this is the public key of this instance
-	pk apicryptosuite.Key
+	pk core.Key
 
 	// reference to the MSP that "owns" this identity
 	msp *bccspmsp
 }
 
-func newIdentity(cert *x509.Certificate, pk apicryptosuite.Key, msp *bccspmsp) (Identity, error) {
+func newIdentity(cert *x509.Certificate, pk core.Key, msp *bccspmsp) (Identity, error) {
 	if mspIdentityLogger.IsEnabledFor(logging.DEBUG) {
 		mspIdentityLogger.Debugf("Creating identity instance for cert %s", certToPEM(cert))
 	}
@@ -134,6 +135,10 @@ func (id *identity) GetOrganizationalUnits() []*OUIdentifier {
 	return res
 }
 
+func (id *identity) Anonymous() bool {
+	return false
+}
+
 // Verify checks against a signature and a message
 // to determine whether this identity produced the
 // signature; it returns nil if so or an error otherwise
@@ -186,7 +191,7 @@ func (id *identity) Serialize() ([]byte, error) {
 	return idBytes, nil
 }
 
-func (id *identity) getHashOpt(hashFamily string) (apicryptosuite.HashOpts, error) {
+func (id *identity) getHashOpt(hashFamily string) (core.HashOpts, error) {
 	switch hashFamily {
 	case bccsp.SHA2:
 		return bccsp.GetHashOpt(bccsp.SHA256)
@@ -204,7 +209,7 @@ type signingidentity struct {
 	signer crypto.Signer
 }
 
-func newSigningIdentity(cert *x509.Certificate, pk apicryptosuite.Key, signer crypto.Signer, msp *bccspmsp) (SigningIdentity, error) {
+func newSigningIdentity(cert *x509.Certificate, pk core.Key, signer crypto.Signer, msp *bccspmsp) (SigningIdentity, error) {
 	//mspIdentityLogger.Infof("Creating signing identity instance for ID %s", id)
 	mspId, err := newIdentity(cert, pk, msp)
 	if err != nil {
