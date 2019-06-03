@@ -25,29 +25,40 @@ TEST_CHANGED_ONLY="${TEST_CHANGED_ONLY:-false}"
 TEST_RACE_CONDITIONS="${TEST_RACE_CONDITIONS:-true}"
 TEST_WITH_LINTER="${TEST_WITH_LINTER:-false}"
 SCRIPT_DIR="$(dirname "$0")"
+CONFIG_DIR=$(pwd)
 
-REPO="github.com/hyperledger/fabric-sdk-go"
+GOMOD_PATH=$(cd ${SCRIPT_DIR} && ${GO_CMD} env GOMOD)
+PROJECT_MODULE=$(awk -F' ' '$1 == "module" {print $2}' ${GOMOD_PATH})
+PROJECT_DIR=$(dirname ${GOMOD_PATH})
+
+MODULE="${MODULE:-${PROJECT_MODULE}}"
+MODULE_PATH="${PROJECT_DIR}/${MODULE#${PROJECT_MODULE}}" && MODULE_PATH=${MODULE_PATH%/}
 
 source ${SCRIPT_DIR}/lib/find_packages.sh
 source ${SCRIPT_DIR}/lib/linter.sh
 
+# Temporary fix for Fabric base image
+unset GOCACHE
+
 echo "Running" $(basename "$0")
 
+PWD_ORIG=$(pwd)
+cd "${MODULE_PATH}"
 declare -a PKGS=(
-    "${REPO}/pkg/core/cryptosuite/bccsp/pkcs11"
-    "${REPO}/pkg/core/cryptosuite/bccsp/multisuite"
-    "${REPO}/pkg/core/cryptosuite/common/pkcs11"
+    "${PROJECT_MODULE}/pkg/core/cryptosuite/bccsp/pkcs11"
+    "${PROJECT_MODULE}/pkg/core/cryptosuite/bccsp/multisuite"
+    "${PROJECT_MODULE}/pkg/core/cryptosuite/common/pkcs11"
 )
 
 # Reduce unit tests to changed packages.
 if [ "$TEST_CHANGED_ONLY" = true ]; then
     # findChangedFiles assumes that the working directory contains the repo; so change to the repo directory.
     PWD_ORIG=$(pwd)
-    cd "${GOPATH}/src/${REPO}"
+    cd "${PROJECT_DIR}"
     findChangedFiles
     cd ${PWD_ORIG}
 
-    if [[ "${CHANGED_FILES[@]}" =~ ( |^)(test/fixtures/|test/metadata/|test/scripts/|Makefile( |$)|Gopkg.lock( |$)|gometalinter.json( |$)|ci.properties( |$)) ]]; then
+    if [[ "${CHANGED_FILES[@]}" =~ ( |^)(test/fixtures/|test/metadata/|test/scripts/|Makefile( |$)|go.mod( |$)|gometalinter.json( |$)|ci.properties( |$)) ]]; then
         echo "Test scripts, fixtures or metadata changed - running all tests"
     else
         findChangedPackages
@@ -93,11 +104,12 @@ echo "creating new slot and label..."
 softhsm2-util --init-token --slot 1 --label "ForFabric1" --pin 98765432 --so-pin 987654
 softhsm2-util --init-token --slot 2 --label "ForFabric2" --pin 22334455 --so-pin 987654
 
-
-
 GO_TAGS="${GO_TAGS} ${FABRIC_SDKGO_CODELEVEL_TAG}"
 
-GO_LDFLAGS="${GO_LDFLAGS} -X github.com/hyperledger/fabric-sdk-go/test/metadata.ChannelConfigPath=test/fixtures/fabric/${FABRIC_SDKGO_CODELEVEL_VER}/channel"
-GO_LDFLAGS="${GO_LDFLAGS} -X github.com/hyperledger/fabric-sdk-go/test/metadata.CryptoConfigPath=test/fixtures/fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config"
-GO_LDFLAGS="${GO_LDFLAGS} -X github.com/hyperledger/fabric-sdk-go/test/metadata.TestRunID=${FABRIC_SDKGO_TESTRUN_ID}"
+GO_LDFLAGS="${GO_LDFLAGS} -X ${PROJECT_MODULE}/test/metadata.ProjectPath=${PROJECT_DIR}"
+GO_LDFLAGS="${GO_LDFLAGS} -X ${PROJECT_MODULE}/test/metadata.ChannelConfigPath=test/fixtures/fabric/${FABRIC_SDKGO_CODELEVEL_VER}/channel"
+GO_LDFLAGS="${GO_LDFLAGS} -X ${PROJECT_MODULE}/test/metadata.CryptoConfigPath=test/fixtures/fabric/${FABRIC_CRYPTOCONFIG_VERSION}/crypto-config"
+GO_LDFLAGS="${GO_LDFLAGS} -X ${PROJECT_MODULE}/test/metadata.TestRunID=${FABRIC_SDKGO_TESTRUN_ID}"
+
 $GO_CMD test ${RACEFLAG} -cover -tags "testing ${GO_TAGS}" ${GO_TESTFLAGS} -ldflags="${GO_LDFLAGS}" ${PKGS[@]} -p 1 -timeout=40m
+cd ${PWD_ORIG}

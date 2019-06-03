@@ -4,6 +4,8 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 
+ignored = ["github.com/hyperledger/fabric-sdk-go/test/*"]
+
 [[constraint]]
   name = "github.com/golang/mock"
   branch = "master"
@@ -14,7 +16,7 @@
 
 [[constraint]]
   name = "google.golang.org/grpc"
-  version = "1.11.3"
+  version = "1.19.0"
 
 [[constraint]]
   name = "github.com/golang/protobuf"

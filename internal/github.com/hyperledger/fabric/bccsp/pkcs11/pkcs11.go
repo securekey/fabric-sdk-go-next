@@ -106,21 +106,6 @@ func namedCurveFromOID(oid asn1.ObjectIdentifier) elliptic.Curve {
 	return nil
 }
 
-func oidFromNamedCurve(curve elliptic.Curve) (asn1.ObjectIdentifier, bool) {
-	switch curve {
-	case elliptic.P224():
-		return oidNamedCurveP224, true
-	case elliptic.P256():
-		return oidNamedCurveP256, true
-	case elliptic.P384():
-		return oidNamedCurveP384, true
-	case elliptic.P521():
-		return oidNamedCurveP521, true
-	}
-
-	return nil, false
-}
-
 func (csp *impl) generateECKey(curve asn1.ObjectIdentifier, ephemeral bool) (ski []byte, pubKey *ecdsa.PublicKey, err error) {
 
 	session := csp.pkcs11Ctx.GetSession()
@@ -302,9 +287,11 @@ func (csp *impl) verifyP11ECDSA(ski []byte, msg []byte, R, S *big.Int, byteSize 
 	return true, nil
 }
 
+type keyType int8
+
 const (
-	privateKeyFlag = true
-	publicKeyFlag  = false
+	publicKeyType keyType = iota
+	privateKeyType
 )
 
 func timeTrack(start time.Time, msg string) {
@@ -312,8 +299,8 @@ func timeTrack(start time.Time, msg string) {
 	logger.Debugf("%s took %s", msg, elapsed)
 }
 
-func (csp *impl) findKeyPairFromSKI(mod *pkcs11.Ctx, session pkcs11.SessionHandle, ski []byte, keyType bool) (*pkcs11.ObjectHandle, error) {
-	return cachebridge.GetKeyPairFromSessionSKI(&cachebridge.KeyPairCacheKey{Mod: mod, Session: session, SKI: ski, KeyType: keyType})
+func (csp *impl) findKeyPairFromSKI(mod *pkcs11.Ctx, session pkcs11.SessionHandle, ski []byte, keyType keyType) (*pkcs11.ObjectHandle, error) {
+	return cachebridge.GetKeyPairFromSessionSKI(&cachebridge.KeyPairCacheKey{Mod: mod, Session: session, SKI: ski, KeyType: keyType == privateKeyType})
 }
 
 // Fairly straightforward EC-point query, other than opencryptoki
@@ -373,7 +360,7 @@ func ecPoint(p11lib *sdkp11.ContextHandle, session pkcs11.SessionHandle, key pkc
 			logger.Debugf("EC point: attr type %d/0x%x, len %d\n%s\n", a.Type, a.Type, len(a.Value), hex.Dump(a.Value))
 
 			// workarounds, see above
-			if (0 == (len(a.Value) % 2)) &&
+			if ((len(a.Value) % 2) == 0) &&
 				(byte(0x04) == a.Value[0]) &&
 				(byte(0x04) == a.Value[len(a.Value)-1]) {
 				logger.Debugf("Detected opencryptoki bug, trimming trailing 0x04")
@@ -424,35 +411,6 @@ func listAttrs(p11lib *sdkp11.ContextHandle, session pkcs11.SessionHandle, obj p
 	}
 }
 
-func (csp *impl) getSecretValue(ski []byte) []byte {
-
-	session := csp.pkcs11Ctx.GetSession()
-	defer csp.pkcs11Ctx.ReturnSession(session)
-
-	keyHandle, err := csp.pkcs11Ctx.FindKeyPairFromSKI(session, ski, privateKeyFlag)
-	if err != nil {
-		logger.Warningf("P11: findKeyPairFromSKI [%s]\n", err)
-	}
-	var privKey []byte
-	template := []*pkcs11.Attribute{
-		pkcs11.NewAttribute(pkcs11.CKA_VALUE, privKey),
-	}
-
-	// certain errors are tolerated, if value is missing
-	attr, err := csp.pkcs11Ctx.GetAttributeValue(session, *keyHandle, template)
-	if err != nil {
-		logger.Warningf("P11: get(attrlist) [%s]\n", err)
-	}
-
-	for _, a := range attr {
-		// Would be friendlier if the bindings provided a way convert Attribute hex to string
-		logger.Debugf("ListAttr: type %d/0x%x, length %d\n%s", a.Type, a.Type, len(a.Value), hex.Dump(a.Value))
-		return a.Value
-	}
-	logger.Warningf("No Key Value found: %v", err)
-	return nil
-}
-
 var (
 	bigone  = new(big.Int).SetInt64(1)
 	idCtr   = new(big.Int)
@@ -465,3 +423,9 @@ func nextIDCtr() *big.Int {
 	idMutex.Unlock()
 	return idCtr
 }
+
+// TODO: Refactor using keyType
+const (
+	privateKeyFlag = true
+	publicKeyFlag  = false
+)

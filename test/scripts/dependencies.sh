@@ -6,14 +6,11 @@
 #
 # This script installs dependencies for testing tools
 # Environment variables that affect this script:
-# GO_DEP_COMMIT: Tag or commit level of the go dep tool to install
 
 set -e
 
 GO_CMD="${GO_CMD:-go}"
-GO_DEP_CMD="${GO_DEP_CMD:-dep}"
-GO_DEP_REPO="github.com/golang/dep"
-GOLANGCI_LINT_CMD="${GOLANGCI_LINT_CMD:-golangci-lint}"
+GOBIN_CMD="${GOBIN_CMD:-gobin}"
 GOPATH="${GOPATH:-${HOME}/go}"
 
 DEPEND_SCRIPT_REVISION=$(git log -1 --pretty=format:"%h" test/scripts/dependencies.sh)
@@ -39,20 +36,13 @@ function recordCacheResult {
     echo ${DEPEND_SCRIPT_REVISION} ${DATE} > "${CACHE_PATH}/${LASTRUN_INFO_FILENAME}"
 }
 
-function installGoDep {
-    declare repo=$1
-    declare revision=$2
+function installGoBin {
+    declare repo="github.com/myitcv/gobin"
+    declare revision="master"
+    declare pkg="github.com/myitcv/gobin"
+    declare cmd="gobin"
 
-    installGoPkg "${repo}" "${revision}" "/cmd/dep" "dep"
-}
-
-function installGolangCiLint {
-    declare repo="github.com/golangci/golangci-lint/cmd/golangci-lint"
-    declare revision="v1.15.0"
-
-    declare pkg="github.com/golangci/golangci-lint/cmd/golangci-lint"
-
-    installGoPkg "${repo}" "${revision}" "" "golangci-lint"
+    installGoPkg "${repo}" "${revision}" "" "${cmd}"
     cp -f ${BUILD_TMP}/bin/* ${GOPATH}/bin/
     rm -Rf ${GOPATH}/src/${pkg}
     mkdir -p ${GOPATH}/src/${pkg}
@@ -68,14 +58,14 @@ function installGoPkg {
 
     echo "Installing ${repo}@${revision} to $GOPATH/bin ..."
 
-    GOPATH=${BUILD_TMP} go get -d ${repo}
+    GO111MODULE=off GOPATH=${BUILD_TMP} go get -d ${repo}
     tag=$(cd ${BUILD_TMP}/src/${repo} && git tag -l --sort=-version:refname | head -n 1 | grep "${revision}" || true)
     if [ ! -z "${tag}" ]; then
         revision=${tag}
         echo "  using tag ${revision}"
     fi
     (cd ${BUILD_TMP}/src/${repo} && git reset --hard ${revision})
-    GOPATH=${BUILD_TMP} GOBIN=${BUILD_TMP}/bin go install -i ${repo}/${pkgPath}
+    GO111MODULE=off GOPATH=${BUILD_TMP} GOBIN=${BUILD_TMP}/bin go install -i ${repo}/${pkgPath}
 
     mkdir -p ${GOPATH}/bin
     for cmd in ${cmds[@]}
@@ -129,11 +119,7 @@ function isDependenciesInstalled {
     declare -a msgs=()
 
     # Check that Go tools are installed and help the user if they are missing
-    type gocov >/dev/null 2>&1 || msgs+=("gocov is not installed (go get -u github.com/axw/gocov/...)")
-    type gocov-xml >/dev/null 2>&1 || msgs+=("gocov-xml is not installed (go get -u github.com/AlekSi/gocov-xml)")
-    type mockgen >/dev/null 2>&1 || msgs+=("mockgen is not installed (go get -u github.com/golang/mock/mockgen)")
-    type ${GO_DEP_CMD} >/dev/null 2>&1 || msgs+=("dep is not installed (go get -u github.com/golang/dep/cmd/dep)")
-    type ${GOLANGCI_LINT_CMD} >/dev/null 2>&1 || msgs+=("golangci-lint is not installed (go get -u ${GOLANGCI_LINT_CMD})")
+    type ${GOBIN_CMD} >/dev/null 2>&1 || msgs+=("${GOBIN_CMD} is not installed (GO111MODULE=off go get -u github.com/myitcv/gobin)")
 
     if [ ${#msgs[@]} -gt 0 ]; then
         if [ ${printMsgs} = true ]; then
@@ -149,16 +135,8 @@ function installDependencies {
     rm -f "${CACHE_PATH}/${LASTRUN_INFO_FILENAME}"
 
     BUILD_TMP=`mktemp -d 2>/dev/null || mktemp -d -t 'fabricsdkgo'`
-    GOPATH=${BUILD_TMP} ${GO_CMD} get -u github.com/axw/gocov/...
-    GOPATH=${BUILD_TMP} ${GO_CMD} get -u github.com/AlekSi/gocov-xml
-    GOPATH=${BUILD_TMP} ${GO_CMD} get -u github.com/golang/mock/mockgen
 
-    installGolangCiLint
-
-    # Install specific version of go dep (particularly for CI)
-    if [ -n "${GO_DEP_COMMIT}" ]; then
-        installGoDep ${GO_DEP_REPO} ${GO_DEP_COMMIT}
-    fi
+    installGoBin
 
     rm -Rf ${BUILD_TMP}
 }

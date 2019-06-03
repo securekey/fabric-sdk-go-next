@@ -12,6 +12,10 @@ import (
 	"testing"
 
 	"github.com/golang/protobuf/proto"
+	"github.com/pkg/errors"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/testdata"
+
 	"github.com/hyperledger/fabric-sdk-go/pkg/client/channel"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/context"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/fab"
@@ -20,22 +24,20 @@ import (
 	"github.com/hyperledger/fabric-sdk-go/pkg/fabsdk"
 	"github.com/hyperledger/fabric-sdk-go/pkg/fabsdk/provider/chpvdr"
 	"github.com/hyperledger/fabric-sdk-go/pkg/util/pathvar"
+	"github.com/stretchr/testify/require"
 
 	"github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/common/cauthdsl"
 	"github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/core/common/ccprovider"
 	pb "github.com/hyperledger/fabric-sdk-go/third_party/github.com/hyperledger/fabric/protos/peer"
-	"github.com/pkg/errors"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/testdata"
 )
 
 const (
 	channelID         = "myChannel"
-	peerTLSServerCert = "${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/test/fixtures/fabric/v1/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/server.crt"
-	peerTLSServerKey  = "${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/test/fixtures/fabric/v1/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/server.key"
+	peerTLSServerCert = "${FABRIC_SDK_GO_PROJECT_PATH}/test/fixtures/fabric/v1/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/server.crt"
+	peerTLSServerKey  = "${FABRIC_SDK_GO_PROJECT_PATH}/test/fixtures/fabric/v1/crypto-config/peerOrganizations/org1.example.com/peers/peer0.org1.example.com/tls/server.key"
 
-	ordererTLSServerCert = "${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/test/fixtures/fabric/v1/crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/tls/server.crt"
-	ordererTLSServerKey  = "${GOPATH}/src/github.com/hyperledger/fabric-sdk-go/test/fixtures/fabric/v1/crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/tls/server.key"
+	ordererTLSServerCert = "${FABRIC_SDK_GO_PROJECT_PATH}/test/fixtures/fabric/v1/crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/tls/server.crt"
+	ordererTLSServerKey  = "${FABRIC_SDK_GO_PROJECT_PATH}/test/fixtures/fabric/v1/crypto-config/ordererOrganizations/example.com/orderers/orderer.example.com/tls/server.key"
 
 	testhost          = "peer0.org1.example.com"
 	testport          = 7051
@@ -55,21 +57,35 @@ var (
 	ordererURL         = fmt.Sprintf("%s:%d", testBrodcasthost, testBroadcastport)
 )
 
-func BenchmarkExecuteTx(b *testing.B) {
+func BenchmarkCallExecuteTx(b *testing.B) {
 	// report memory allocations for this benchmark
 	b.ReportAllocs()
 
 	// using channel Client, let's start the benchmark
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		chClient.Execute(chRq)
-		//require.NoError(b, err, "expected no error for valid channel client invoke")
+		_, err := chClient.Execute(chRq)
+		require.NoError(b, err, "expected no error for valid channel client Execute invoke")
 
 		//b.Logf("Execute Responses: %s", resp.Responses)
 	}
 }
 
-func BenchmarkExecuteTxParallel(b *testing.B) {
+func BenchmarkCallQuery(b *testing.B) {
+	// report memory allocations for this benchmark
+	b.ReportAllocs()
+
+	// using channel Client, let's start the benchmark
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		_, err := chClient.Query(chRq)
+		require.NoError(b, err, "expected no error for valid channel client Query invoke")
+
+		//b.Logf("Query Responses: %s", resp.Responses)
+	}
+}
+
+func BenchmarkCallExecuteTxParallel(b *testing.B) {
 	// report memory allocations for this benchmark
 	b.ReportAllocs()
 
@@ -78,8 +94,25 @@ func BenchmarkExecuteTxParallel(b *testing.B) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			chClient.Execute(chRq)
-			//require.NoError(b, err, "expected no error for valid channel client parallel invoke")
+			_, err := chClient.Execute(chRq)
+			require.NoError(b, err, "expected no error for valid channel client parallel Execute invoke")
+
+			//b.Logf("Execute Responses: %s", resp.Responses)
+		}
+	})
+}
+
+func BenchmarkCallQueryTxParallel(b *testing.B) {
+	// report memory allocations for this benchmark
+	b.ReportAllocs()
+
+	// using channel Client, let's start the benchmark
+	b.ResetTimer()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_, err := chClient.Query(chRq)
+			require.NoError(b, err, "expected no error for valid channel client parallel Query invoke")
 
 			//b.Logf("Execute Responses: %s", resp.Responses)
 		}
