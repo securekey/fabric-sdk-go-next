@@ -368,6 +368,13 @@ func (handle *ContextHandle) validateSession(currentSession mPkcs11.SessionHandl
 
 	handle.lock.RLock()
 
+	e := isEmpty(currentSession)
+	if e != nil {
+		logger.Warnf("Not validating session[%d] due to [%d], ", currentSession, e)
+		return currentSession
+	}
+
+	logger.Warnf("Validating session[%d], for any error condition....", currentSession)
 	e := handle.detectErrorCondition(currentSession)
 
 	switch e {
@@ -380,7 +387,7 @@ func (handle *ContextHandle) validateSession(currentSession mPkcs11.SessionHandl
 		mPkcs11.Error(mPkcs11.CKR_GENERAL_ERROR),
 		mPkcs11.Error(mPkcs11.CKR_USER_NOT_LOGGED_IN):
 
-		logger.Warnf("Found error condition [%s], attempting to recreate pkcs11 context and re-login....", e)
+		logger.Warnf("Found error condition [%s] for session[%d], attempting to recreate pkcs11 context and re-login....", e, currentSession)
 
 		handle.lock.RUnlock()
 		handle.lock.Lock()
