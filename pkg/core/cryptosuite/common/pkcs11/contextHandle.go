@@ -110,13 +110,13 @@ func (handle *ContextHandle) ReturnSession(session mPkcs11.SessionHandle) {
 
 	e := isEmpty(session)
 	if e != nil {
-		logger.Warnf("not returning session [%d], due to error [%s]. Discarding it", session, e)
+		logger.Warnf("not returning session [%d], due to error [%v]. Discarding it", session, e)
 		return
 	}
 
 	_, e = handle.ctx.GetSessionInfo(session)
 	if e != nil {
-		logger.Warnf("not returning session [%d], due to error [%s]. Discarding it", session, e)
+		logger.Warnf("not returning session [%d], due to error [%v]. Discarding it", session, e)
 		e = handle.ctx.CloseSession(session)
 		if e != nil {
 			logger.Warn("unable to close session:", e)
@@ -174,8 +174,8 @@ func (handle *ContextHandle) GetSession() (session mPkcs11.SessionHandle) {
 			return s
 		}
 		logger.Debugf("Created new pkcs11 session %+v on slot %d", s, handle.slot)
-		session = s
 		cachebridge.ClearSession(fmt.Sprintf("%d", session))
+		return s
 	}
 	return handle.validateSession(session)
 }
@@ -368,7 +368,15 @@ func (handle *ContextHandle) validateSession(currentSession mPkcs11.SessionHandl
 
 	handle.lock.RLock()
 
-	e := handle.detectErrorCondition(currentSession)
+	e := isEmpty(currentSession)
+	if e != nil {
+		logger.Debugf("Not validating session[%d] due to [%d], ", currentSession, e)
+		return currentSession
+	}
+
+	logger.Debugf("Validating session[%+v], for any error condition....", currentSession)
+	e = handle.detectErrorCondition(currentSession)
+	logger.Debugf("Validating session[%+v], found error condition....[%v]", currentSession, e)
 
 	switch e {
 	case errSlotIDChanged,
@@ -380,17 +388,17 @@ func (handle *ContextHandle) validateSession(currentSession mPkcs11.SessionHandl
 		mPkcs11.Error(mPkcs11.CKR_GENERAL_ERROR),
 		mPkcs11.Error(mPkcs11.CKR_USER_NOT_LOGGED_IN):
 
-		logger.Warnf("Found error condition [%s], attempting to recreate pkcs11 context and re-login....", e)
+		logger.Warnf("Found error condition [%s] for session[%+v], attempting to recreate pkcs11 context and re-login....", e.Error(), currentSession)
 
 		handle.lock.RUnlock()
-		handle.lock.Lock()
-		defer handle.lock.Unlock()
-
-		newSession, err := handle.reLogin()
-		if err != nil {
-			logger.Warnf("Re-login Failed : %s,", err)
-		}
-		return newSession
+		//handle.lock.Lock()
+		//defer handle.lock.Unlock()
+		//
+		//newSession, err := handle.reLogin()
+		//if err != nil {
+		//	logger.Warnf("Re-login Failed to recover session[%v], cause: %s,", currentSession, err)
+		//}
+		return 0
 
 	case mPkcs11.Error(mPkcs11.CKR_DEVICE_MEMORY),
 		mPkcs11.Error(mPkcs11.CKR_DEVICE_REMOVED):
@@ -408,6 +416,7 @@ func (handle *ContextHandle) validateSession(currentSession mPkcs11.SessionHandl
 // Note: this function isn't thread safe, recommended to use write lock for calling this function
 func (handle *ContextHandle) reLogin() (mPkcs11.SessionHandle, error) {
 
+
 	// dispose existing pkcs11 ctx
 	handle.disposePKCS11Ctx()
 
@@ -417,6 +426,8 @@ func (handle *ContextHandle) reLogin() (mPkcs11.SessionHandle, error) {
 		logger.Warn("Failed to recreate new pkcs11 context for given library")
 		return 0, errors.New("failed to recreate new pkcs11 context for given library")
 	}
+
+	//replace it with new one
 	handle.ctx = newCtx
 
 	// find slot
