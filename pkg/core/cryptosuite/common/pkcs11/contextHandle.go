@@ -8,7 +8,6 @@ package pkcs11
 
 import (
 	"fmt"
-
 	"sync"
 
 	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/sdkpatch/cachebridge"
@@ -110,13 +109,13 @@ func (handle *ContextHandle) ReturnSession(session mPkcs11.SessionHandle) {
 
 	e := isEmpty(session)
 	if e != nil {
-		logger.Warnf("not returning session [%d], due to error [%s]. Discarding it", session, e)
+		logger.Warnf("not returning session [%d], due to error [%v]. Discarding it", session, e)
 		return
 	}
 
 	_, e = handle.ctx.GetSessionInfo(session)
 	if e != nil {
-		logger.Warnf("not returning session [%d], due to error [%s]. Discarding it", session, e)
+		logger.Debugf("not returning session [%d], due to error [%v]. Discarding it", session, e)
 		e = handle.ctx.CloseSession(session)
 		if e != nil {
 			logger.Warn("unable to close session:", e)
@@ -174,8 +173,8 @@ func (handle *ContextHandle) GetSession() (session mPkcs11.SessionHandle) {
 			return s
 		}
 		logger.Debugf("Created new pkcs11 session %+v on slot %d", s, handle.slot)
-		session = s
 		cachebridge.ClearSession(fmt.Sprintf("%d", session))
+		return s
 	}
 	return handle.validateSession(session)
 }
@@ -358,7 +357,14 @@ func (handle *ContextHandle) FindKeyPairFromSKI(session mPkcs11.SessionHandle, s
 		return nil, errors.Wrap(err, "Failed to find key pair from SKI")
 	}
 
-	return cachebridge.GetKeyPairFromSessionSKI(&cachebridge.KeyPairCacheKey{Mod: handle.ctx, Session: session, SKI: ski, KeyType: keyType})
+	ctx, err := handle.ctx.GetInfo()
+	logger.Debugf("FindKeyPairFromSKI CTX info %+v, %+v", ctx, err)
+
+	obj, err := cachebridge.GetKeyPairFromSessionSKI(&cachebridge.KeyPairCacheKey{Mod: handle.ctx, Session: session, SKI: ski, KeyType: keyType})
+	if err != nil {
+		logger.Debugf("FindKeyPairFromSKI failed with error", err)
+	}
+	return obj, err
 }
 
 //validateSession validates given session
@@ -368,7 +374,15 @@ func (handle *ContextHandle) validateSession(currentSession mPkcs11.SessionHandl
 
 	handle.lock.RLock()
 
-	e := handle.detectErrorCondition(currentSession)
+	e := isEmpty(currentSession)
+	if e != nil {
+		logger.Debugf("Not validating session[%d] due to [%d], ", currentSession, e)
+		return currentSession
+	}
+
+	logger.Debugf("Validating session[%+v], for any error condition....", currentSession)
+	e = handle.detectErrorCondition(currentSession)
+	logger.Debugf("Validating session[%+v], found error condition....[%v]", currentSession, e)
 
 	switch e {
 	case errSlotIDChanged,
@@ -380,7 +394,7 @@ func (handle *ContextHandle) validateSession(currentSession mPkcs11.SessionHandl
 		mPkcs11.Error(mPkcs11.CKR_GENERAL_ERROR),
 		mPkcs11.Error(mPkcs11.CKR_USER_NOT_LOGGED_IN):
 
-		logger.Warnf("Found error condition [%s], attempting to recreate pkcs11 context and re-login....", e)
+		logger.Warnf("Found error condition [%s] for session[%+v], attempting to recreate pkcs11 context and re-login....", e.Error(), currentSession)
 
 		handle.lock.RUnlock()
 		handle.lock.Lock()
@@ -388,7 +402,7 @@ func (handle *ContextHandle) validateSession(currentSession mPkcs11.SessionHandl
 
 		newSession, err := handle.reLogin()
 		if err != nil {
-			logger.Warnf("Re-login Failed : %s,", err)
+			logger.Warnf("Re-login Failed to recover session[%v], cause: %s,", currentSession, err)
 		}
 		return newSession
 
@@ -412,12 +426,23 @@ func (handle *ContextHandle) reLogin() (mPkcs11.SessionHandle, error) {
 	handle.disposePKCS11Ctx()
 
 	// create new context
-	newCtx := handle.createNewPKCS11Ctx()
-	if newCtx == nil {
+	//newCtx := handle.createNewPKCS11Ctx()
+	//if newCtx == nil {
+	//	logger.Warn("Failed to recreate new pkcs11 context for given library")
+	//	return 0, errors.New("failed to recreate new pkcs11 context for given library")
+	//}
+
+	ctxInfo, err := handle.ctx.GetInfo()
+	logger.Debugf("*created new ctx : %+v, %+v", ctxInfo, err)
+
+	err = handle.ctx.Initialize()
+	if err != mPkcs11.Error(mPkcs11.CKR_CRYPTOKI_ALREADY_INITIALIZED) {
 		logger.Warn("Failed to recreate new pkcs11 context for given library")
-		return 0, errors.New("failed to recreate new pkcs11 context for given library")
+		return 0, errors.WithMessage(err, "failed to recreate new pkcs11 context for given library")
 	}
-	handle.ctx = newCtx
+
+	ctxInfo, err = handle.ctx.GetInfo()
+	logger.Debugf("*created new handle.ctx : %+v, %+v", ctxInfo, err)
 
 	// find slot
 	slot, found := handle.findSlot(handle.ctx)
@@ -442,9 +467,15 @@ func (handle *ContextHandle) reLogin() (mPkcs11.SessionHandle, error) {
 		return 0, errors.Errorf("unable to login with new session :%d", newSession)
 	}
 
+	ctxInfo, err = handle.ctx.GetInfo()
+	logger.Debugf("*Able to login with recreated ctx and session : %+v, %+v", ctxInfo, err)
+
 	handle.sendNotification()
 	handle.slot = slot
 	handle.sessions = make(chan mPkcs11.SessionHandle, handle.opts.sessionCacheSize)
+
+	ctxInfo, err = handle.ctx.GetInfo()
+	logger.Debugf("**Able to login with recreated ctx and session : %+v, %+v", ctxInfo, err)
 
 	logger.Infof("Able to login with recreated session successfully")
 	return newSession, nil
@@ -494,14 +525,14 @@ func (handle *ContextHandle) disposePKCS11Ctx() {
 	//clear cache
 	cachebridge.ClearAllSession()
 
-	//Initialize context
-	err = handle.ctx.Finalize()
-	if err != nil {
-		logger.Warnf("unable to finalize pkcs11 ctx for [%s, %s] : %s", handle.lib, handle.label, err)
-	}
-
-	//Destroy context
-	handle.ctx.Destroy()
+	////Initialize context
+	//err = handle.ctx.Finalize()
+	//if err != nil {
+	//	logger.Warnf("unable to finalize pkcs11 ctx for [%s, %s] : %s", handle.lib, handle.label, err)
+	//}
+	//
+	////Destroy context
+	//handle.ctx.Destroy()
 }
 
 //createNewPKCS11Ctx creates new mPkcs11.Ctx
