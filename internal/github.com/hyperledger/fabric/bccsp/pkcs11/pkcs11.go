@@ -300,7 +300,15 @@ func timeTrack(start time.Time, msg string) {
 }
 
 func (csp *impl) findKeyPairFromSKI(mod *pkcs11.Ctx, session pkcs11.SessionHandle, ski []byte, keyType keyType) (*pkcs11.ObjectHandle, error) {
-	return cachebridge.GetKeyPairFromSessionSKI(&cachebridge.KeyPairCacheKey{Mod: mod, Session: session, SKI: ski, KeyType: keyType == privateKeyType})
+	logger.Debugf("findKeyPairFromSKI for pkcs11 %+v", session)
+	ctx, err := mod.GetInfo()
+	logger.Debugf("findKeyPairFromSKI CTX info %+v, %+v", ctx, err)
+
+	obj, err := cachebridge.GetKeyPairFromSessionSKI(&cachebridge.KeyPairCacheKey{Mod: mod, Session: session, SKI: ski, KeyType: keyType == privateKeyType})
+	if err != nil {
+		logger.Debugf("findKeyPairFromSKI failed with error", err)
+	}
+	return obj, err
 }
 
 // Fairly straightforward EC-point query, other than opencryptoki
