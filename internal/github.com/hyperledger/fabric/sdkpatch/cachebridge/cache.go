@@ -70,16 +70,20 @@ func timeTrack(start time.Time, msg string) {
 }
 
 func ClearAllSession() {
-	logger.Debugf("Clearing all sessions")
+	logger.Debug("Clearing all session from session cache ")
 	sessionCache.DeleteAll()
 }
 
 func ClearSession(key string) {
-	logger.Debugf("Clearing session for key : '%s'", key)
+	logger.Debugf("Clearing given session for key [%+v] from session cache ", key)
 	sessionCache.Delete(&SessionCacheKey{SessionID: key})
 }
 
 func GetKeyPairFromSessionSKI(keyPairCacheKey *KeyPairCacheKey) (*pkcs11.ObjectHandle, error) {
+	logger.Debugf("GetKeyPairFromSessionSKI for session %+v", keyPairCacheKey.Session)
+	ctx, err := keyPairCacheKey.Mod.GetInfo()
+	logger.Debugf("init getKeyPairFromSKI CTX info %+v, %+v", ctx, err)
+
 	keyPairCache, err := sessionCache.Get(&SessionCacheKey{SessionID: fmt.Sprintf("%d", keyPairCacheKey.Session)})
 	if err != nil {
 		return nil, err
@@ -89,14 +93,21 @@ func GetKeyPairFromSessionSKI(keyPairCacheKey *KeyPairCacheKey) (*pkcs11.ObjectH
 		defer timeTrack(time.Now(), fmt.Sprintf("finding  key [session: %d] [ski: %x]", keyPairCacheKey.Session, keyPairCacheKey.SKI))
 		value, err := val.Get(keyPairCacheKey)
 		if err != nil {
+			logger.Debugf("Failed finding key [session: %d] from [ski: %x]", keyPairCacheKey.Session, keyPairCacheKey.SKI)
 			return nil, err
 		}
+		logger.Debugf("Found key [session: %d] from [ski: %x]", keyPairCacheKey.Session, keyPairCacheKey.SKI)
 		return value.(*pkcs11.ObjectHandle), nil
 	}
 	return nil, fmt.Errorf("cannot find session in sessionCache")
 }
 
 func getKeyPairFromSKI(keyPairCacheKey *KeyPairCacheKey) (*pkcs11.ObjectHandle, error) {
+
+	logger.Debugf("init getKeyPairFromSKI for session %+v", keyPairCacheKey.Session)
+	ctx, err := keyPairCacheKey.Mod.GetInfo()
+	logger.Debugf("init getKeyPairFromSKI CTX info %+v, %+v", ctx, err)
+
 	ktype := pkcs11.CKO_PUBLIC_KEY
 	if keyPairCacheKey.KeyType == privateKeyFlag {
 		ktype = pkcs11.CKO_PRIVATE_KEY
