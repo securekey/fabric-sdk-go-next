@@ -8,6 +8,7 @@ package discovery
 
 import (
 	"context"
+	"strings"
 	"sync"
 
 	discclient "github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/discovery/client"
@@ -70,18 +71,31 @@ func (c *Client) Send(ctx context.Context, req *discclient.Request, targets ...f
 	var responses []Response
 	var errs error
 
+	reqCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	for _, t := range targets {
 		go func(target fab.PeerConfig) {
 			defer wg.Done()
 
-			resp, err := c.send(ctx, req, target)
+			targetCtx, cancelTarget := context.WithCancel(reqCtx)
+			defer cancelTarget()
+
+			resp, err := c.send(targetCtx, req, target)
 			lock.Lock()
 			if err != nil {
-				errs = multi.Append(errs, errors.WithMessage(err, "From target: "+target.URL))
-				logger.Debugf("... got discovery error response from [%s]: %s", target.URL, err)
+				if !isContextCanceled(err) {
+					errs = multi.Append(errs, errors.WithMessage(err, "From target: "+target.URL))
+					logger.Debugf("... got discovery error response from [%s]: %s", target.URL, err)
+				} else {
+					logger.Debugf("... request to [%s] cancelled", target.URL)
+				}
 			} else {
 				responses = append(responses, &response{Response: resp, target: target.URL})
 				logger.Debugf("... got discovery response from [%s]", target.URL)
+
+				// Cancel all outstanding requests
+				cancel()
 			}
 			lock.Unlock()
 		}(t)
@@ -138,4 +152,8 @@ func newAuthInfo(ctx fabcontext.Client) (*discovery.AuthInfo, error) {
 		ClientIdentity:    identity,
 		ClientTlsCertHash: hash,
 	}, nil
+}
+
+func isContextCanceled(err error) bool {
+	return strings.Contains(err.Error(), context.Canceled.Error())
 }

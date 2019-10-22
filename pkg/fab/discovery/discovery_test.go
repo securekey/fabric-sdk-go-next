@@ -15,7 +15,6 @@ import (
 	"time"
 
 	discclient "github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/discovery/client"
-	"github.com/hyperledger/fabric-sdk-go/pkg/common/errors/multi"
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/fab"
 	"github.com/hyperledger/fabric-sdk-go/pkg/fab/comm"
 	discmocks "github.com/hyperledger/fabric-sdk-go/pkg/fab/discovery/mocks"
@@ -61,9 +60,7 @@ func TestDiscoveryClient(t *testing.T) {
 	responses, err := client.Send(ctx, req, target1, target2, target3)
 	cancel()
 
-	assert.Error(t, err)
-	errs, ok := err.(multi.Errors)
-	assert.True(t, ok)
+	assert.NoError(t, err)
 
 	if len(responses) != 1 {
 		t.Fatalf("expecting 1 response but got %d", len(responses))
@@ -82,9 +79,6 @@ func TestDiscoveryClient(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 2, len(peers))
 	t.Logf("Got success response from channel query [%s]: Num Peers: %d", response.Target(), len(peers))
-
-	assert.Equal(t, 2, len(errs))
-	t.Logf("Got error responses: %s", errs)
 }
 
 var discoverServer *discmocks.MockDiscoveryServer
