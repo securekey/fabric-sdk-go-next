@@ -203,14 +203,94 @@ func TestOrderersURLOverride(t *testing.T) {
 	user := mspmocks.NewMockSigningIdentity("test", "test")
 	ctx := mocks.NewMockContext(user)
 	ctx.SetEndpointConfig(endpointCfg)
+	// create a mock channel config for mychannel with this orderer created above
 	chConfig := mocks.NewMockChannelCfg("mychannel")
 	chConfig.MockOrderers = []string{"example.com"}
 
+	// now test orderersFromChannelCfg with above channel config (chConfig) and sdk config passed in as ctx
 	o, err := orderersFromChannelCfg(ctx, chConfig)
 	assert.Nil(t, err)
 	assert.NotEmpty(t, o)
 	assert.Equal(t, 1, len(o), "expected one orderer from response orderers list")
 	assert.Equal(t, sampleOrdererURL, o[0].URL(), "orderer URL override from endpointconfig channels is not working as expected")
+
+	// now try to add a second orderer to the configs
+	// 1. update channel config with this new orderer
+	chConfig.MockOrderers = append(chConfig.MockOrderers, "example2.com")
+	// 2. update sdk configs as well
+	sampleOrderer2URL := "orderer.example2.com:9999"
+	networkConfig.Orderers["orderer.example2.com"] = fabImpl.OrdererConfig{
+		URL:         sampleOrderer2URL,
+		TLSCACerts:  networkConfig.Orderers["orderer.example.com"].TLSCACerts,  // for testing only, adding dummy cert
+		GRPCOptions: networkConfig.Orderers["orderer.example.com"].GRPCOptions, // for testing only, adding dummy cert
+	}
+	backendMap["orderers"] = networkConfig.Orderers
+
+	backendMap["channels"] = map[string]interface{}{
+		"mychannel": map[string]interface{}{
+			"orderers": []string{"orderer.example.com", "orderer.example2.com"},
+		},
+	}
+
+	backends = append([]core.ConfigBackend{}, &mocksConfig.MockConfigBackend{KeyValueMap: backendMap})
+	backends = append(backends, configBackends...)
+	endpointCfg, err = fabImpl.ConfigFromBackend(backends...)
+	if err != nil {
+		t.Fatal("failed to get endpoint config", err)
+	}
+	ctx.SetEndpointConfig(endpointCfg)
+	// 3. now test orderersFromChannelCfg with updated chConfig and sdk config (ctx)
+	o, err = orderersFromChannelCfg(ctx, chConfig)
+	assert.Nil(t, err)
+	assert.NotEmpty(t, o)
+	assert.Equal(t, 2, len(o), "expected 2 orderers from response orderers list")
+	assert.Equal(t, sampleOrdererURL, o[0].URL(), "orderer URL override from endpointconfig channels is not working as expected")
+	assert.Equal(t, sampleOrderer2URL, o[1].URL(), "orderer URL override from endpointconfig channels is not working as expected")
+
+	// finally add a blacklisted orderer and ensure it's not returned in the configs
+	// 1. add it to the channel config
+	chConfig.MockOrderers = append(chConfig.MockOrderers, "excluded.example3.com")
+
+	sampleOrdererExcludedURL := "orderer.excluded.example3.com:8888"
+	networkConfig.Orderers["orderer.excluded.example3.com"] = fabImpl.OrdererConfig{
+		URL:         sampleOrdererExcludedURL,
+		TLSCACerts:  networkConfig.Orderers["orderer.example.com"].TLSCACerts,  // for testing only, adding dummy cert
+		GRPCOptions: networkConfig.Orderers["orderer.example.com"].GRPCOptions, // for testing only, adding dummy cert
+	}
+	backendMap["orderers"] = networkConfig.Orderers
+
+	backendMap["channels"] = map[string]interface{}{
+		"mychannel": map[string]interface{}{
+			"orderers": []string{"orderer.example.com", "orderer.example2.com", sampleOrdererExcludedURL},
+		},
+	}
+
+	// 2. add an entityMatchers entry for the blacklisted orderer
+	backendMap["entityMatchers"] = map[string]interface{}{
+		"orderer": []interface{}{
+			map[string]interface{}{
+				"pattern":        "(\\w+).excluded.example3.(\\w+):(\\d+)",
+				"ignoreEndpoint": true,
+			},
+		},
+	}
+
+	backends = append([]core.ConfigBackend{}, &mocksConfig.MockConfigBackend{KeyValueMap: backendMap})
+	backends = append(backends, configBackends...)
+	endpointCfg, err = fabImpl.ConfigFromBackend(backends...)
+	if err != nil {
+		t.Fatal("failed to get endpoint config", err)
+	}
+	ctx.SetEndpointConfig(endpointCfg)
+
+	// orderer.excluded.example3 is marked as ignored (ignoreEndpoint:true) in SDK configs while
+	// it is added in the channel config (chConfig)
+	o, err = orderersFromChannelCfg(ctx, chConfig)
+	assert.Nil(t, err)
+	assert.NotEmpty(t, o)
+	assert.Equal(t, 2, len(o), "expected 2 orderers from response orderers list")
+	assert.Equal(t, sampleOrdererURL, o[0].URL(), "orderer URL override from endpointconfig channels is not working as expected")
+	assert.Equal(t, sampleOrderer2URL, o[1].URL(), "orderer URL override from endpointconfig channels is not working as expected")
 }
 
 //endpointConfigEntity contains endpoint config elements needed by endpointconfig
