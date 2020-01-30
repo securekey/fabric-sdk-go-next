@@ -76,14 +76,18 @@ func orderersFromChannelCfg(ctx context.Client, cfg fab.ChannelCfg) ([]fab.Order
 		if !ok {
 			logger.Debugf("Failed to get channel Cfg orderer [%s] from ordererDict, now trying orderer Matchers in Entity Matchers", target)
 			// Try to find a match from entityMatchers config
-			matchingOrdererConfig, found := ctx.EndpointConfig().OrdererConfig(strings.ToLower(target))
+			matchingOrdererConfig, found, ignore := ctx.EndpointConfig().OrdererConfig(strings.ToLower(target))
+			if ignore {
+				continue
+			}
+
 			if found {
 				logger.Debugf("Found matching ordererConfig from entity Matchers for channel Cfg Orderer [%s]", target)
 				oCfg = *matchingOrdererConfig
 				ok = true
 			}
-
 		}
+
 		//create orderer using channel config block orderer address
 		if !ok {
 			logger.Debugf("Unable to find matching ordererConfig from entity Matchers for channel Cfg Orderer [%s]", target)
@@ -112,8 +116,8 @@ func orderersFromChannel(ctx context.Client, channelID string) ([]fab.Orderer, e
 	orderers := []fab.Orderer{}
 	for _, chOrderer := range chNetworkConfig.Orderers {
 
-		ordererConfig, found := ctx.EndpointConfig().OrdererConfig(chOrderer)
-		if !found {
+		ordererConfig, found, ignoreOrderer := ctx.EndpointConfig().OrdererConfig(chOrderer)
+		if !found || ignoreOrderer {
 			//continue if given channel orderer not found in endpoint config
 			continue
 		}
