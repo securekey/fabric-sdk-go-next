@@ -14,6 +14,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pkg/errors"
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+
 	"github.com/hyperledger/fabric-sdk-go/pkg/common/providers/core"
 	fabImpl "github.com/hyperledger/fabric-sdk-go/pkg/common/providers/fab"
 	"github.com/hyperledger/fabric-sdk-go/pkg/core/config"
@@ -21,9 +25,6 @@ import (
 	"github.com/hyperledger/fabric-sdk-go/pkg/core/mocks"
 	"github.com/hyperledger/fabric-sdk-go/pkg/fab"
 	"github.com/hyperledger/fabric-sdk-go/test/metadata"
-	"github.com/pkg/errors"
-	"github.com/spf13/viper"
-	"github.com/stretchr/testify/assert"
 )
 
 const (
@@ -32,6 +33,7 @@ const (
 	configMSPOnly                = "config_test_msp_only.yaml"
 	configPemTestFile            = "config_test_pem.yaml"
 	configTestEntityMatchersFile = "config_test_entity_matchers.yaml"
+	configTestNoServerCerts      = "config_test_no_server_certs.yaml"
 	configType                   = "yaml"
 )
 
@@ -328,7 +330,44 @@ func TestCAConfigCryptoFiles(t *testing.T) {
 	sCertFiles, ok := identityConfig.CAServerCerts(org1)
 	assert.True(t, ok, "Getting CA server cert files failed")
 	assert.True(t, len(sCertFiles) > 0)
+}
 
+func TestCAConfigNoServerCerts(t *testing.T) {
+	//Test config
+	configPath := filepath.Join(getConfigPath(), configTestNoServerCerts)
+	backend, err := config.FromFile(configPath)()
+	if err != nil {
+		t.Fatal("Failed to get config backend")
+	}
+
+	config, err := ConfigFromBackend(backend...)
+	if err != nil {
+		t.Fatal("Failed to get identity config")
+	}
+	identityConfig := config.(*IdentityConfig)
+
+	//Testing CA Client File Location
+	certfile, ok := identityConfig.CAClientCert(org1)
+	assert.True(t, ok, "CA Cert file location read failed ")
+	assert.NotEmpty(t, certfile)
+
+	//Testing CA Key File Location
+	keyFile, ok := identityConfig.CAClientKey(org1)
+	assert.True(t, ok, "CA Key file location read failed ")
+	assert.NotEmpty(t, keyFile)
+
+	//Testing CA Server Cert Files
+	sCertFiles, ok := identityConfig.CAServerCerts(org1)
+	assert.True(t, ok, "Getting CA server cert files failed")
+	assert.Empty(t, sCertFiles)
+
+	// set system cert pool to false
+	cfgBackends := []core.ConfigBackend{&noSystemCertPool{}}
+	cfgBackends = append(cfgBackends, backend...)
+
+	config, err = ConfigFromBackend(cfgBackends...)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to load server certs")
 }
 
 func TestCAConfig(t *testing.T) {
@@ -516,4 +555,14 @@ func TestEntityMatchers(t *testing.T) {
 	configImpl := identityConfig.(*IdentityConfig)
 	assert.Equal(t, 3, len(configImpl.caMatchers), "preloading matchers isn't working as expected")
 
+}
+
+type noSystemCertPool struct {
+}
+
+func (c *noSystemCertPool) Lookup(key string) (interface{}, bool) {
+	if key == "client.tlsCerts.systemCertPool" {
+		return false, true
+	}
+	return nil, false
 }
