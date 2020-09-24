@@ -387,6 +387,10 @@ func (handle *ContextHandle) Sign(session mPkcs11.SessionHandle, message []byte)
 	return handle.ctx.Sign(session, message)
 }
 
+func (handle *ContextHandle) CloseSession(session mPkcs11.SessionHandle) error {
+	return handle.ctx.CloseSession(session)
+}
+
 // VerifyInit initializes a verification operation, where the
 // signature is an appendix to the data, and plaintext cannot
 // be recovered from the signature (e.g. DSA).
