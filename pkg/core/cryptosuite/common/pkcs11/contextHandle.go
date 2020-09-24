@@ -8,6 +8,7 @@ package pkcs11
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/sdkpatch/cachebridge"
@@ -131,18 +132,18 @@ func (handle *ContextHandle) ReturnSession(session mPkcs11.SessionHandle) {
 		return
 	}
 
-	_, e = handle.ctx.GetSessionInfo(session)
+	sInfo, e := handle.ctx.GetSessionInfo(session)
 	if e != nil {
-		logger.Debugf("not returning session [%d], due to error [%s]. Discarding it", session, e)
+		logger.Debugf("** not returning session [%d], due to error [%s]. Discarding it", session, e)
 		e = handle.ctx.CloseSession(session)
 		if e != nil {
-			logger.Warn("unable to close session:", e)
+			logger.Warn("....unable to close session:", e)
 		}
 		cachebridge.ClearSession(fmt.Sprintf("%d", session))
 		return
 	}
 
-	logger.Debugf("Returning session : %d", session)
+	logger.Debugf("Returning session : %d, found to be clean : %v", session, sInfo)
 
 	select {
 	case handle.sessions <- session:
@@ -152,9 +153,15 @@ func (handle *ContextHandle) ReturnSession(session mPkcs11.SessionHandle) {
 		e = handle.ctx.CloseSession(session)
 		cachebridge.ClearSession(fmt.Sprintf("%d", session))
 		if e != nil {
-			logger.Warn("unable to close session: ", e)
+			logger.Warn("#unable to close session: ", e)
 		}
 	}
+}
+
+// TODO delete
+func (handle *ContextHandle) CloseSession(session mPkcs11.SessionHandle) error {
+	cachebridge.ClearSession(fmt.Sprintf("%d", session))
+	return handle.ctx.CloseSession(session)
 }
 
 //GetSession returns session from session pool
@@ -384,7 +391,19 @@ func (handle *ContextHandle) Sign(session mPkcs11.SessionHandle, message []byte)
 		return nil, e
 	}
 
-	return handle.ctx.Sign(session, message)
+	bytes, e := handle.ctx.Sign(session, message)
+	if e != nil {
+		if strings.Contains(e.Error(), "CKR_OPERATION_NOT_INITIALIZED") {
+			logger.Debugf("Found CKR_OPERATION_NOT_INITIALIZED error during sign [session: %d]: closing the session", session)
+
+			err := handle.ctx.CloseSession(session)
+			if err != nil {
+				logger.Warnf("Failed to close session after failed sign operation [session: %d]: cause: %s", session, err)
+			}
+		}
+	}
+
+	return bytes, e
 }
 
 // VerifyInit initializes a verification operation, where the
@@ -602,7 +621,13 @@ func (handle *ContextHandle) detectErrorCondition(currentSession mPkcs11.Session
 		if e == nil {
 			logger.Debugf("Validating operation state for session[%+v]", currentSession)
 			_, e = handle.ctx.GetOperationState(currentSession)
+		} else {
+			logger.Debugf("Found error while getting session info : session[%+v] : %s", currentSession, e)
 		}
+	}
+
+	if e != nil {
+		logger.Debugf("Found error while getting operation state : session[%+v] : %s", currentSession, e)
 	}
 
 	return e

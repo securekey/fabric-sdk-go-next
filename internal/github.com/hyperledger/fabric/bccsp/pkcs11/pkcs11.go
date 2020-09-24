@@ -17,7 +17,9 @@ import (
 	"encoding/asn1"
 	"encoding/hex"
 	"fmt"
+	"github.com/hyperledger/fabric-sdk-go/internal/github.com/hyperledger/fabric/common/util"
 	"math/big"
+	"regexp"
 	"sync"
 	"time"
 
@@ -28,12 +30,27 @@ import (
 	"github.com/miekg/pkcs11"
 )
 
+var regex = regexp.MustCompile(".*0xB.:\\sCKR.+")
+
+func (csp *impl) handleSessionReturn(err error, session pkcs11.SessionHandle) {
+	if err != nil {
+		if regex.MatchString(err.Error()) {
+			logger.Debugf("PKCS11 session invalidated, closing session: %v, not returning to pool", err)
+			csp.pkcs11Ctx.CloseSession(session)
+			return
+		}
+	}
+
+	csp.pkcs11Ctx.ReturnSession(session)
+}
+
 // Look for an EC key by SKI, stored in CKA_ID
 // This function can probably be adapted for both EC and RSA keys.
 func (csp *impl) getECKey(ski []byte) (pubKey *ecdsa.PublicKey, isPriv bool, err error) {
 
 	session := csp.pkcs11Ctx.GetSession()
-	defer csp.pkcs11Ctx.ReturnSession(session)
+	defer func() { csp.handleSessionReturn(err, session) }()
+
 	isPriv = true
 	_, err = csp.pkcs11Ctx.FindKeyPairFromSKI(session, ski, privateKeyFlag)
 	if err != nil {
@@ -109,7 +126,7 @@ func namedCurveFromOID(oid asn1.ObjectIdentifier) elliptic.Curve {
 func (csp *impl) generateECKey(curve asn1.ObjectIdentifier, ephemeral bool) (ski []byte, pubKey *ecdsa.PublicKey, err error) {
 
 	session := csp.pkcs11Ctx.GetSession()
-	defer csp.pkcs11Ctx.ReturnSession(session)
+	defer func() { csp.handleSessionReturn(err, session) }()
 
 	id := nextIDCtr()
 	publabel := fmt.Sprintf("BCPUB%s", id.Text(16))
@@ -222,25 +239,39 @@ func (csp *impl) generateECKey(curve asn1.ObjectIdentifier, ephemeral bool) (ski
 
 func (csp *impl) signP11ECDSA(ski []byte, msg []byte) (R, S *big.Int, err error) {
 
+	uuid := util.GenerateUUID()
+	logger.Debugf("[%s], Starting Sign operation for P11ECDSA", uuid)
+
 	session := csp.pkcs11Ctx.GetSession()
-	defer csp.pkcs11Ctx.ReturnSession(session)
+	defer func() {
+		logger.Debugf("[%s], returning [session: %d] from signP11ECDSA", uuid, session)
+		// csp.pkcs11Ctx.ReturnSession(session)
+		csp.handleSessionReturn(err, session)
+		logger.Debugf("[%s], returned [session: %d] from signP11ECDSA", uuid, session)
+	}()
+
 
 	privateKey, err := csp.pkcs11Ctx.FindKeyPairFromSKI(session, ski, privateKeyFlag)
-	defer timeTrack(time.Now(), fmt.Sprintf("signing [session: %d]", session))
+	defer timeTrack(time.Now(), fmt.Sprintf("[%s], signing [session: %d]", uuid, session))
 	if err != nil {
-		return nil, nil, fmt.Errorf("Private key not found [%s]", err)
+		return nil, nil, fmt.Errorf("[%s], Private key not found [%s]", uuid, err)
 	}
 
+	logger.Debugf("[%s], Performing signInt [session: %d]", uuid, session)
 	err = csp.pkcs11Ctx.SignInit(session, []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_ECDSA, nil)}, *privateKey)
 	if err != nil {
-		return nil, nil, fmt.Errorf("Sign-initialize  failed [%s]", err)
+		logger.Errorf("[%s], Sign-initialize failed [session: %d]: cause: %s", uuid, session, err)
+		return nil, nil, fmt.Errorf("Sign-initialize  failed [%s][%s]", err, uuid)
 	}
+
+	logger.Debugf("[%s], Performing Signing [session: %d]", uuid, session)
 
 	var sig []byte
 
 	sig, err = csp.pkcs11Ctx.Sign(session, msg)
 	if err != nil {
-		return nil, nil, fmt.Errorf("P11: sign failed [%s]", err)
+		logger.Errorf("[%s], P11: sign failed [session: %d]: cause: %s", uuid, session, err)
+		return nil, nil, fmt.Errorf("P11: sign failed [%s][%s]", uuid, err)
 	}
 
 	R = new(big.Int)
@@ -253,8 +284,9 @@ func (csp *impl) signP11ECDSA(ski []byte, msg []byte) (R, S *big.Int, err error)
 
 func (csp *impl) verifyP11ECDSA(ski []byte, msg []byte, R, S *big.Int, byteSize int) (bool, error) {
 
+	var err error
 	session := csp.pkcs11Ctx.GetSession()
-	defer csp.pkcs11Ctx.ReturnSession(session)
+	defer func() { csp.handleSessionReturn(err, session) }()
 
 	logger.Debugf("Verify ECDSA\n")
 
