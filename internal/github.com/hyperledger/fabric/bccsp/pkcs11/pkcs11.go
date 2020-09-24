@@ -18,6 +18,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"math/big"
+	"strings"
 	"sync"
 	"time"
 
@@ -231,15 +232,27 @@ func (csp *impl) signP11ECDSA(ski []byte, msg []byte) (R, S *big.Int, err error)
 		return nil, nil, fmt.Errorf("Private key not found [%s]", err)
 	}
 
+	logger.Debugf("Performing signInt [session: %d]", session)
 	err = csp.pkcs11Ctx.SignInit(session, []*pkcs11.Mechanism{pkcs11.NewMechanism(pkcs11.CKM_ECDSA, nil)}, *privateKey)
 	if err != nil {
+		logger.Errorf("Sign-initialize failed [session: %d]: cause: %s", session, err)
 		return nil, nil, fmt.Errorf("Sign-initialize  failed [%s]", err)
 	}
 
 	var sig []byte
 
+	logger.Debugf("Performing Signing [session: %d]", session)
 	sig, err = csp.pkcs11Ctx.Sign(session, msg)
 	if err != nil {
+		logger.Errorf("P11: sign failed [session: %d]: cause: %s", session, err)
+		if strings.Contains(err.Error(), "CKR_OPERATION_NOT_INITIALIZED") {
+			logger.Debugf("Found CKR_OPERATION_NOT_INITIALIZED error [session: %d]: closing this session", session)
+
+			e := csp.pkcs11Ctx.CloseSession(session)
+			if e != nil {
+				logger.Warnf("Failed to close session [session: %d]: cause: %s", session, e)
+			}
+		}
 		return nil, nil, fmt.Errorf("P11: sign failed [%s]", err)
 	}
 

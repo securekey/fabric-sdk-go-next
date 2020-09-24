@@ -387,6 +387,10 @@ func (handle *ContextHandle) Sign(session mPkcs11.SessionHandle, message []byte)
 	return handle.ctx.Sign(session, message)
 }
 
+func (handle *ContextHandle) CloseSession(session mPkcs11.SessionHandle) error {
+	return handle.ctx.CloseSession(session)
+}
+
 // VerifyInit initializes a verification operation, where the
 // signature is an appendix to the data, and plaintext cannot
 // be recovered from the signature (e.g. DSA).
@@ -602,7 +606,13 @@ func (handle *ContextHandle) detectErrorCondition(currentSession mPkcs11.Session
 		if e == nil {
 			logger.Debugf("Validating operation state for session[%+v]", currentSession)
 			_, e = handle.ctx.GetOperationState(currentSession)
+		} else {
+			logger.Debugf("Found error while getting session info : session[%+v] : %s", currentSession, e)
 		}
+	}
+
+	if e != nil {
+		logger.Debugf("Found error while getting operation state : session[%+v] : %s", currentSession, e)
 	}
 
 	return e
